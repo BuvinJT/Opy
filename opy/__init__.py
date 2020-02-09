@@ -3,15 +3,18 @@ Library Interface for Opy Utility
 """
 from . import settings
 from . settings import ConfigSettings as OpyConfig
-from . opy_patcher import OpyFile, patch, setLine, replaceInLine
+from . opy_patcher import OpyFile, patch, \
+    setLine, replaceInLine, obfuscatedId
    
 class OpyResults:
     def __init__(self):
-        self.obfuscatedFileDict     = None
-        self.obfuscatedWordList     = None
-        self.obfuscatedModImports   = None
-        self.maskedIdentifiers      = None
-        self.skippedPublicSet       = None
+        self.obfuscatedFiles = None
+        self.obfuscatedIds   = None   
+        self.obfuscatedMods  = None    
+        self.maskedIds       = None
+        self.clearTextMods   = None
+        self.clearTextPublic = None    
+        self.clearTextIds    = None           
             
 def obfuscate( sourceRootDirectory = None
              , targetRootDirectory = None
@@ -69,7 +72,7 @@ def __runOpy():
     global opy    
     try :
         if settings.isPython2 : 
-            reload( opy )
+            reload( opy ) # @UndefinedVariable
         else :
             try : # Python 3.0 to 3.3                
                 import imp 
@@ -78,10 +81,12 @@ def __runOpy():
                 import importlib
                 importlib.reload( opy ) # @UndefinedVariable
     except : from . import opy
-    results = OpyResults()
-    results.obfuscatedFileDict   = opy.obfuscatedFileDict
-    results.obfuscatedWordList   = opy.obfuscatedWordList
-    results.obfuscatedModImports = opy.skipWordList
-    results.maskedIdentifiers    = opy.opy_parser.obfuscatedModImports 
-    results.skippedPublicSet     = opy.opy_parser.maskedIdentifiers 
+    results = OpyResults()    
+    results.obfuscatedFiles = opy.obfuscatedFileDict
+    results.obfuscatedIds   = opy.obfuscatedWordDict   
+    results.obfuscatedMods  = opy.opy_parser.obfuscatedModImports    
+    results.maskedIds       = opy.opy_parser.maskedIdentifiers
+    results.clearTextMods   = opy.opy_parser.clearTextModImports
+    results.clearTextPublic = opy.skippedPublicSet        
+    results.clearTextIds    = opy.skipWordList    
     return results

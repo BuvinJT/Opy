@@ -24,6 +24,7 @@ import importlib  # @UnusedImport
 import random
 import codecs
 import shutil
+import six
 
 isPython2 = sys.version_info [0] == 2
 if isPython2 : 
@@ -457,6 +458,7 @@ import {0} as currentModule
 
     obfuscatedFileDict = {}
     obfuscatedWordList = []
+    obfuscatedWordDict = {}
     obfuscatedRegExList = []
     skippedPublicSet=set()
 
@@ -547,11 +549,13 @@ import {0} as currentModule
                 obfuscatedRegExList += strippedSourceRegExList
                 
                 # Replace words to be obfuscated by obfuscated ones
-                for obfuscationIndex, obfuscatedRegEx in enumerate (obfuscatedRegExList):
-                    normalContent = obfuscatedRegEx.sub (
-                        getObfuscatedName (obfuscationIndex, obfuscatedWordList [obfuscationIndex]),
-                        normalContent
-                    )   # Use regex to prevent replacing word parts
+                for obfuscationIndex, obfuscatedRegEx in enumerate (obfuscatedRegExList):              
+                    clrName = obfuscatedWordList[ obfuscationIndex ]     
+                    obfName = getObfuscatedName( obfuscationIndex, clrName )
+                    obfuscatedWordDict[clrName]=obfName
+                    # Use regex to prevent replacing word parts
+                    normalContent = obfuscatedRegEx.sub ( obfName, normalContent )   
+                    
                     
             # Replace string placeholders by strings
             
@@ -607,12 +611,39 @@ import {0} as currentModule
             targetFilePath = '{0}/{1}'.format (targetSubDirectory, sourceFileName)
             createFilePath (targetFilePath)
             shutil.copyfile (sourceFilePath, targetFilePath)
-                
-    print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
-    print ('Obfuscated words: {0}'.format (len (obfuscatedWordList)))
-    print ('Obfuscated module imports: {0}'.format (opy_parser.obfuscatedModImports))
-    print ('Masked identifier imports: {0}'.format (opy_parser.maskedIdentifiers))
-    print ('Skipped public identifiers: {0}'.format (skippedPublicSet))
+
+    # POST PROCESS
+    #-----------------------------------------------------------------------------------
+     
+    # for maskedIdentifiers, swap the clear text masks with the obfuscations  
+    # for obfuscatedWordDict, remove the mask entries
+    masks=[]
+    for clr, obf in six.iteritems( obfuscatedWordDict ):
+        for unMasked, masked in six.iteritems( opy_parser.maskedIdentifiers ):
+            if masked==clr:
+                masks.append( clr )
+                opy_parser.maskedIdentifiers[ unMasked ] = obf                
+                break    
+    for m in masks: obfuscatedWordDict.pop( m, None )
+    
+    if isLibraryInvoked or dryRun:
+        print ('>>> Obfuscation Details:')            
+        print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
+        print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
+        print ('Masked identifiers: {0}'.format ( opy_parser.maskedIdentifiers ))
+        print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
+        print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
+        print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
+        print ('')    
+    else:    
+        print ('>>> Obfuscation Summary:')            
+        print ('Obfuscated files: {0}'.format ( len(obfuscatedFileDict) ))
+        print ('Obfuscated identifiers: {0}'.format (len(obfuscatedWordDict)))
+        print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
+        print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
+        print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
+        print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
+        print ('')
     
     # Opyfying something twice can and is allowed to fail.
     # The obfuscation for e.g. variable 1 in round 1 can be the same as the obfuscation for e.g. variable 2 in round 2.

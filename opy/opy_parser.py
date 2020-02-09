@@ -24,10 +24,17 @@ WILDCARD             = "*"
 
 # -----------------------------------------------------------------------------
 obfuscatedModImports = set()
-maskedIdentifiers    = set() 
-__modReplace = {}
-__modAliases = {}
-__mbrAliases = {} 
+clearTextModImports  = set()
+maskedIdentifiers    = {}
+
+_modAliases = {}
+_mbrAliases = {} 
+_modReplace = {}
+def _resetAliases():
+    global _modAliases, _mbrAliases, _modReplace
+    _modAliases = {}
+    _mbrAliases = {} 
+    _modReplace = {}
 
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
 
@@ -46,7 +53,7 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
     This function has multiple modes of operation: 
     
     __ANALIZE_MODE 
-        Simply find imports and populate obfuscatedModImports and maskedIdentifiers 
+        Simply find imports and populate the global collections for the results 
         
     __MASK_MODE 
         Provide aliases for the non-obfuscated imports modules and objects 
@@ -58,15 +65,14 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
     __REPLACE_MODE        
                 
     """
-
-    global __modAliases, __mbrAliases, __modReplace                
-    __modAliases = {} 
-    __mbrAliases = {}
-    __modReplace = replacements
+    
+    _resetAliases()
+    global _modReplace
+    _modReplace=replacements
 
     def isImportLn( line ):
-        # mulit-line strings/comments should have been isolated
-        # from the fileContent before assignExternalAliases was called
+        # multi-line strings/comments should have been isolated
+        # from the fileContent before this was called
         stripped = line.strip()
         isImportLine = stripped.startswith( IMPORT_PREFIX )
         isFromLine = stripped.startswith( FROM_PREFIX )
@@ -86,12 +92,12 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
         subMod = ""
         for sub in modSubs:                
             subMod += sub if subMod == "" else (SUB_MOD_DELIM + sub)
-            if subMod in __modReplace: return subMod
+            if subMod in _modReplace: return subMod
         return None                        
     
     def processLine( line, mode ):
-        global obfuscatedModImports, maskedIdentifiers, \
-            __modAliases, __mbrAliases, __modReplace
+        global obfuscatedModImports, clearTextModImports, maskedIdentifiers, \
+            _modAliases, _mbrAliases, _modReplace
         # determine if this is an import/from line
         stripped = line.strip()
         _, isImportLine, isFromLine = isImportLn( line )
@@ -115,9 +121,11 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
                     # replace the leading portions of the module name only
                     # preserving any sub module names which may follow                    
                     modName = modName.replace( replaceKey, 
-                                               __modReplace[replaceKey] )        
+                                               _modReplace[replaceKey] )        
                 else:
-                    if not isClearTextMod( modName ):
+                    if isClearTextMod( modName ):
+                        clearTextModImports.add( modName )
+                    else :
                         obfuscatedModImports.add( modName ) 
                         return line                                                
                 itemsPart = SPACE.join( tokens[3:] )     
@@ -143,7 +151,8 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
                     isSkipped = replaceKey is None 
                 else:
                     isSkipped = not isClearTextMod( modName )
-                    if isSkipped : obfuscatedModImports.add( modName ) 
+                    if isSkipped : obfuscatedModImports.add( modName )
+                    else: clearTextModImports.add( modName )     
                 if isSkipped :
                     revisedImports.append( item )
                     continue                           
@@ -155,7 +164,7 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
                     # replace the leading portions of the module name only
                     # preserving any sub module names which may follow                    
                     replacement = importName.replace( replaceKey, 
-                                                      __modReplace[replaceKey] )                    
+                                                      _modReplace[replaceKey] )                    
                     # replace the module name and either preserve an 
                     # existing alias, or alias it be the original name 
                     # if it doesn't have one
@@ -167,14 +176,13 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
             else :
                 # give the import an alias if it doesn't have one                
                 if not isAliased:
-                    alias = ( ALIAS_TEMPLATE % 
-                              (len(__modAliases) + len(__mbrAliases),) )
-                    item = SET_ALIAS_TEMPLATE % ( importName, alias )      
-                    if isImportLine : 
-                        __modAliases[importName]=alias
-                    else: 
-                        __mbrAliases[importName]=alias        
-                    maskedIdentifiers.add( importName )                                                
+                    try: alias = maskedIdentifiers[ importName ]
+                    except: 
+                        alias = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
+                        maskedIdentifiers[ importName ]=alias                                              
+                    if isImportLine: _modAliases[importName]=alias
+                    else:            _mbrAliases[importName]=alias
+                    item = SET_ALIAS_TEMPLATE % ( importName, alias )        
             revisedImports.append( item )          
         # re-build the line                                                        
         leadSpaces = SPACE * (len(line) - len(line.lstrip(SPACE)))
@@ -186,7 +194,7 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
         return line
 
     def applyAliases( lines ): 
-        #TODO: trim this down. It functions, it's ugly...
+        #TODO: trim this down. It functions, but it's ugly...
         nakedAliasesRegEx={}
         dotAliasesRegEx={}        
         for name in maskedIdentifiers :
@@ -199,13 +207,13 @@ def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
         for line in lines:
             if not isImportLn( line )[0]:
                 for name, regEx in six.iteritems( dotAliasesRegEx ):
-                    modAlias = __modAliases.get(name)
-                    mbrAlias = __mbrAliases.get(name)                    
+                    modAlias = _modAliases.get(name)
+                    mbrAlias = _mbrAliases.get(name)                    
                     if mbrAlias: line = regEx.sub( mbrAlias + MEMBER_DELIM, line )
                     elif modAlias: line = regEx.sub( modAlias + MEMBER_DELIM, line )                    
                 for name, regEx in six.iteritems( nakedAliasesRegEx ):
-                    modAlias = __modAliases.get(name)
-                    mbrAlias = __mbrAliases.get(name)                    
+                    modAlias = _modAliases.get(name)
+                    mbrAlias = _mbrAliases.get(name)                    
                     if mbrAlias: line = regEx.sub( mbrAlias, line )
                     elif modAlias: line = regEx.sub( modAlias, line )                    
             revLines.append( line )
