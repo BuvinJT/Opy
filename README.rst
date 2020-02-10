@@ -179,6 +179,25 @@ B) Append the argument keywords to the plain_names list.
 Workaround:
 Define the dictionaries and/or key constants in a dedicated module (for import where needed), which is then added to the plain_files list.
 
+- Bug: The parser is not finding imports on multi-part lines, such as the below example: ::    	
+
+	try:    from tkinter import Tk 
+	except: from Tkinter import Tk
+	try:    from tkinter.ttk import Button 
+	except: from ttk import Button
+
+Workaround:
+	Simply break the lines apart! ::    	
+
+	try:    
+		from tkinter import Tk 
+	except: 
+		from Tkinter import Tk
+	try:    
+		from tkinter.ttk import Button 
+	except: 
+		from ttk import Button
+
 - Bug: When string obfuscation is enabled, multi-line string literals which are implicitly continued without the use of an explicit '+' operator between cannot be used. 
 
 Example, the following string would result in an error. ::
