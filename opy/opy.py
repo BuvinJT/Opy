@@ -26,9 +26,11 @@ import codecs
 import shutil
 import six
 
+DEFAULT_ENCODING = "utf-8"
+
 isPython2 = sys.version_info [0] == 2
 if isPython2 : 
-    import __builtin__
+    import __builtin__ # @UnresolvedImport
 else:
     import builtins
     
@@ -39,11 +41,12 @@ except:
     isLibraryInvoked=False
 
 try: 
-    from . import opy_parser                # @UnusedImport
+    from . import opy_parser            # @UnusedImport
     from . _version import __version__  # @UnusedImport
 except: 
-    import opy_parser                   # @Reimport
-    from _version import __version__    # @Reimport
+    import opy_parser                   # @Reimport @UnresolvedImport
+    from _version import __version__    # @Reimport @UnresolvedImport
+opy_parser._reset()
 
 programName = 'opy'
 
@@ -68,7 +71,7 @@ if (__name__ == '__main__') or isLibraryInvoked:
                 raise
                 
         if open:
-            return codecs.open (filePath, encoding = 'utf-8', mode = 'w')
+            return codecs.open (filePath, encoding = DEFAULT_ENCODING, mode = 'w')
             
     def getObfuscatedName (obfuscationIndex, name):
         return '{0}{1}{2}'.format (
@@ -81,8 +84,8 @@ if (__name__ == '__main__') or isLibraryInvoked:
         global stringNr
         
         if isPython2:
-            recodedStringLiteral = unicode () .join ([unichr (charBase + ord (char) + (charIndex + stringNr) % charModulus) for charIndex, char in enumerate (stringLiteral)])
-            stringKey = unichr (stringNr)
+            recodedStringLiteral = unicode () .join ([unichr (charBase + ord (char) + (charIndex + stringNr) % charModulus) for charIndex, char in enumerate (stringLiteral)]) # @UndefinedVariable
+            stringKey = unichr (stringNr) # @UndefinedVariable
         else:
             recodedStringLiteral = str () .join ([chr (charBase + ord (char) + (charIndex + stringNr) % charModulus) for charIndex, char in enumerate (stringLiteral)])
             stringKey = chr (stringNr)
@@ -94,7 +97,7 @@ if (__name__ == '__main__') or isLibraryInvoked:
         stringNr += 1
         return 'u"' + keyedStringLiteral + '"'      
         
-    def getUnScrambler (stringBase):
+    def getUnScrambler (stringBase):  # @UnusedVariable
         return '''
 from sys import version_info as __opyVerInfo
 
@@ -273,7 +276,7 @@ Licence:
             
     shebangCommentRegEx = re.compile (r'^{0}!'.format (r'#'))
     codingCommentRegEx = re.compile ('coding[:=]\s*([-\w.]+)')
-    keepCommentRegEx = re.compile ('.*{0}.*'.format (plainMarker), re.DOTALL)
+    keepCommentRegEx = re.compile ('.*{0}.*'.format (plainMarker), re.DOTALL)  # @UndefinedVariable
         
     def getCommentPlaceholderAndRegister (matchObject):
         comment = matchObject.group (0)
@@ -283,7 +286,7 @@ Licence:
         else:
             return ''
         
-    def getComment (matchObject):
+    def getComment (matchObject):  # @UnusedVariable
         global commentIndex
         commentIndex += 1
         return replacedComments [commentIndex]
@@ -293,13 +296,13 @@ Licence:
                 r"(?<!')",
                 r'(?<!")',
                 r'  # '  # According to PEP8 an inline comment should start like this.
-            ), re.MULTILINE)
+            ), re.MULTILINE) # @UndefinedVariable
         if pep8_comments else  # @UndefinedVariable
             re.compile (r'{0}{1}{2}.*?$'.format (
                 r"(?<!')",
                 r'(?<!")',
                 r'#'
-            ), re.MULTILINE)
+            ), re.MULTILINE) # @UndefinedVariable
     )
     commentPlaceholder = '_{0}_c_'.format (programName)
     commentPlaceholderRegEx = re.compile (r'{0}'.format (commentPlaceholder))
@@ -308,7 +311,7 @@ Licence:
 
     keepStringRegEx = re.compile (r'.*{0}.*'.format (plainMarker))
         
-    def getDecodedStringPlaceholderAndRegister (matchObject):
+    def getDecodedStringPlaceholderAndRegister (matchObject): 
         string = matchObject.group (0)
         if obfuscateStrings:
             if keepStringRegEx.search (string): # Rare, so no need for speed
@@ -321,7 +324,7 @@ Licence:
             replacedStrings.append (string)
             return stringPlaceholder
         
-    def getString (matchObject):
+    def getString (matchObject):  # @UnusedVariable
         global stringIndex
         stringIndex += 1
         return replacedStrings [stringIndex]
@@ -331,7 +334,7 @@ Licence:
         r'""".*?(?<![^\\]\\)(?<![^\\]\")"""',
         r"'.*?(?<![^\\]\\)'",
         r'".*?(?<![^\\]\\)"'
-    ), re.MULTILINE | re.DOTALL | re.VERBOSE)
+    ), re.MULTILINE | re.DOTALL | re.VERBOSE) # @UndefinedVariable
 
     stringPlaceholder = '_{0}_s_'.format (programName)
     stringPlaceholderRegEx = re.compile (r'{0}'.format (stringPlaceholder))
@@ -347,7 +350,7 @@ Licence:
             nrOfSpecialLines += 1
         return ''
         
-    fromFutureRegEx = re.compile ('from\s*__future__\s*import\s*\w+.*$', re.MULTILINE)
+    fromFutureRegEx = re.compile ('from\s*__future__\s*import\s*\w+.*$', re.MULTILINE) # @UndefinedVariable
 
     # ============ Define identifier recognition tools
 
@@ -361,7 +364,7 @@ Licence:
         (?<!{0})    # Not ending with commentPlaceholder
         (?<!{1})    # Not ending with stringPlaceHolder
         \b          # Delimited
-    '''.format (commentPlaceholder, stringPlaceholder), re.VERBOSE) # De Morgan
+    '''.format (commentPlaceholder, stringPlaceholder), re.VERBOSE) # De Morgan # @UndefinedVariable
 
     chrRegEx = re.compile (r'\bchr\b')
 
@@ -476,7 +479,7 @@ import {0} as currentModule
         if sourceFileNameExtension in sourceFileNameExtensionList and not sourceFilePath in plainFilePathList:
             stringBase = random.randrange (64)
         
-            sourceFile = codecs.open (sourceFilePath, encoding = 'utf-8')
+            sourceFile = codecs.open (sourceFilePath, encoding = DEFAULT_ENCODING)
             content = sourceFile.read () 
             sourceFile.close ()
             
@@ -501,7 +504,7 @@ import {0} as currentModule
                     insertCodingComment = False                                                 #   Don't insert, it's already there
                 
             if obfuscateStrings and insertCodingComment:                                        # Obfuscated strings are always converted to unicode
-                contentList [nrOfSpecialLines:nrOfSpecialLines] = ['# coding: UTF-8']           # Insert the coding line if it wasn't there
+                contentList [nrOfSpecialLines:nrOfSpecialLines] = ['# coding: ' + DEFAULT_ENCODING]           # Insert the coding line if it wasn't there
                 nrOfSpecialLines += 1                                                           # And remember it's there
                                                                                                 # Nothing has to happen with an eventual shebang line
             if obfuscateStrings:
@@ -514,12 +517,12 @@ import {0} as currentModule
             
             normalContent = commentRegEx.sub (getCommentPlaceholderAndRegister, normalContent)
              
-            # Replace strings by string placeholders
+            # Replace strings by string place holders
             
             replacedStrings = []
             normalContent = stringRegEx.sub (getDecodedStringPlaceholderAndRegister, normalContent)
             
-            # Take eventual out 'from __future__ import ... ' line and add it to contentlist
+            # Take eventual out 'from __future__ import ... ' line and add it to content list
             # Content list is prepended to normalContent later
             
             normalContent = fromFutureRegEx.sub (moveFromFuture, normalContent)
@@ -557,12 +560,12 @@ import {0} as currentModule
                     normalContent = obfuscatedRegEx.sub ( obfName, normalContent )   
                     
                     
-            # Replace string placeholders by strings
+            # Replace string place holders by strings
             
             stringIndex = -1
             normalContent = stringPlaceholderRegEx.sub (getString, normalContent)
         
-            # Replace nonempty comment placeholders by comments
+            # Replace nonempty comment place holders by comments
             
             commentIndex = -1
             normalContent = commentPlaceholderRegEx.sub (getComment, normalContent)
@@ -580,7 +583,7 @@ import {0} as currentModule
                 # Obfuscate module name
                 try:
                     targetFilePreName = getObfuscatedName (obfuscatedWordList.index (sourceFilePreName), sourceFilePreName)
-                except: # Not in list, e.g. toplevel module name
+                except: # Not in list, e.g. top level module name
                     targetFilePreName = sourceFilePreName
                 
                 # Obfuscate module subdir names, but only above the project root!
@@ -625,8 +628,18 @@ import {0} as currentModule
                 opy_parser.maskedIdentifiers[ unMasked ] = obf                
                 break    
     for m in masks: obfuscatedWordDict.pop( m, None )
+
+    print ('>>> Obfuscation Summary:')                
+    print ('Target Root Directory: {0}'.format ( targetRootDirectory ))
+    print ('Obfuscated files: {0}'.format ( len(obfuscatedFileDict) ))
+    print ('Obfuscated identifiers: {0}'.format (len(obfuscatedWordDict)))
+    print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
+    print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
+    print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
+    print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
+    print ('')
     
-    if isLibraryInvoked or dryRun:
+    if dryRun:
         print ('>>> Obfuscation Details:')            
         print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
         print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
@@ -635,15 +648,6 @@ import {0} as currentModule
         print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
         print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
         print ('')    
-    else:    
-        print ('>>> Obfuscation Summary:')            
-        print ('Obfuscated files: {0}'.format ( len(obfuscatedFileDict) ))
-        print ('Obfuscated identifiers: {0}'.format (len(obfuscatedWordDict)))
-        print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
-        print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
-        print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
-        print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
-        print ('')
     
     # Opyfying something twice can and is allowed to fail.
     # The obfuscation for e.g. variable 1 in round 1 can be the same as the obfuscation for e.g. variable 2 in round 2.

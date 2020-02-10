@@ -1,6 +1,7 @@
 import six
-
-DEFAULT_ENCODING = "utf-8"
+import codecs
+try:    from . opy import DEFAULT_ENCODING  # @UnusedImport
+except: from opy import DEFAULT_ENCODING    # @Reimport @UnresolvedImport
 
 _PLACEHOLDER_PREFIX = "OBF__"
 _PLACEHOLDER_SUFFIX = "__OBF"
@@ -11,10 +12,8 @@ class OpyFile:
         self.__path = path
         self.__results = opyResults 
         self.__encoding = encoding        
-        f = ( open( self.__path, 'r' ) if six.PY2 else 
-              open( self.__path, 'r', encoding=self.__encoding ) )
-        self.__lines = f.readlines()
-        f.close() 
+        with codecs.open( self.__path, 'r', encoding=self.__encoding ) as f:
+            self.__lines = f.readlines()
             
     def lines( self, isNumbered=False ):
         if isNumbered: 
@@ -33,10 +32,8 @@ class OpyFile:
                 self.__resolvePlaceholders( new ) ) ) 
 
     def update( self ):
-        f = ( open( self.__path, 'w' ) if six.PY2 else 
-              open( self.__path, 'w', encoding=self.__encoding ) )
-        f.writelines( self.__lines )
-        f.close() 
+        with codecs.open( self.__path, 'w', encoding=self.__encoding ) as f:
+            f.writelines( self.__lines )
             
     def __ensureLineEnding( self, line ):
         return line if line.endswith(_NEWLINE) else "%s%s" % (line,_NEWLINE)

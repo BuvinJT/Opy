@@ -26,10 +26,20 @@ WILDCARD             = "*"
 obfuscatedModImports = set()
 clearTextModImports  = set()
 maskedIdentifiers    = {}
-
 _modAliases = {}
 _mbrAliases = {} 
 _modReplace = {}
+
+def _reset():
+    global obfuscatedModImports, clearTextModImports, maskedIdentifiers    
+    global _modAliases, _mbrAliases, _modReplace
+    obfuscatedModImports = set()
+    clearTextModImports  = set()
+    maskedIdentifiers    = {}
+    _modAliases = {}
+    _mbrAliases = {} 
+    _modReplace = {}
+
 def _resetAliases():
     global _modAliases, _mbrAliases, _modReplace
     _modAliases = {}
