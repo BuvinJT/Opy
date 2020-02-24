@@ -75,29 +75,23 @@ test_dummy
 
 
 #====================================================================================================
-# Modules in sys.path containing identifiers that should not be obfuscated
-# Typically these are installed standard or 3rd party modules of which you have no source code
-# Use dotted names if needed, e.g. include both matplotlib and matplotlib.pyplot
+# Modules in sys.path containing identifiers that should NOT be obfuscated
+# Typically, these are installed standard library modules, or part of 3rd party libaries
+# for which you have no source code. 
+Use dotted names if needed, e.g. include both matplotlib and matplotlib.pyplot
 #====================================================================================================
 
 external_modules = '''
-re
-os
-sys
-io
-errno
-keyword
-importlib
-random
-codecs
-shutil
-traceback
-collections
-json
-datetime 
 '''
 
-
+#====================================================================================================
+# *** BETA FEATURE ***
+#
+# If enabled, the module / libraries listed in the standard_exclusions.txt file will be
+# referrenced automatically to build upon the external_modules list provided.  
+#
+#====================================================================================================
+apply_standard_exclusions = True
 
 #====================================================================================================
 # *** BETA FEATURE ***

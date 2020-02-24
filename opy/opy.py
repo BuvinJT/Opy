@@ -25,35 +25,129 @@ import random
 import codecs
 import shutil
 import six
+import copy
 
-DEFAULT_ENCODING = "utf-8"
+PROGRAM_NAME = 'opy'
+DEFAULT_ENCODING = 'utf-8'
+from . _version import __version__  
+from . opy_config import OpyConfig 
+from . import opy_parser            
 
-isPython2 = sys.version_info [0] == 2
+mainCount=0
+isPython2=six.PY2
 if isPython2 : 
     import __builtin__ # @UnresolvedImport
 else:
-    import builtins
+    import builtins   
+
+def __fetchStandardExclusions():
+    filePath = os.path.join( os.path.dirname(__file__),
+                             'standard_exclusions.txt' )
+    with codecs.open( filePath, 'r', 'utf-8' ) as f:
+        lines = f.read().split( '\n' )
+    cleanLines = [ l.strip() for l in lines if len( l.strip() ) > 0 ]    
+    cleanList = list( set( cleanLines ) )
+    return cleanList
+standardExclusions = __fetchStandardExclusions()
+   
+class OpyResults:
+    def __init__(self):
+        self.obfuscatedFiles = None
+        self.obfuscatedIds   = None   
+        self.obfuscatedMods  = None    
+        self.maskedIds       = None
+        self.clearTextMods   = None
+        self.clearTextPublic = None    
+        self.clearTextIds    = None           
+
+class RunOptions:
+    def __init__( self ) :
+        self.printHelp           = False
+        self.sourceRootDirectory = None
+        self.targetRootDirectory = None
+        self.configFilePath      = None # None == default, False == use configSettings
+        self.configSettings      = None
+   
+def obfuscate( sourceRootDirectory = None
+             , targetRootDirectory = None
+             , configFilePath      = None
+             , configSettings      = None
+             ):    
+    runOptions = RunOptions()
+    runOptions.printHelp           = False
+    runOptions.sourceRootDirectory = sourceRootDirectory
+    runOptions.targetRootDirectory = targetRootDirectory
+    runOptions.configSettings      = configSettings
+    runOptions.configFilePath = ( 
+        configFilePath if configSettings is None else False )        
+    return __obfuscate( runOptions )
     
-try: 
-    from . import settings 
-    isLibraryInvoked = settings.isLibraryInvoked
-except:
-    isLibraryInvoked=False
+def analyze( sourceRootDirectory = None
+           , configSettings      = OpyConfig()
+           , fileList            = []             
+           ):    
+    runOptions = RunOptions()
+    runOptions.printHelp           = False
+    runOptions.sourceRootDirectory = sourceRootDirectory
+    runOptions.targetRootDirectory = None
+    runOptions.configFilePath      = False    
+    runOptions.configSettings = copy.copy( configSettings )    
+    if fileList and len(fileList) > 0:
+        runOptions.configSettings.subset_files = fileList
+    return __analyze( runOptions )
 
-try: 
-    from . import opy_parser            # @UnusedImport
-    from . _version import __version__  # @UnusedImport
-except: 
-    import opy_parser                   # @Reimport @UnresolvedImport
-    from _version import __version__    # @Reimport @UnresolvedImport
-opy_parser._reset()
+def printHelp():    
+    runOptions = RunOptions()
+    runOptions.printHelp = True
+    __main( runOptions )   
 
-programName = 'opy'
+def __obfuscate( runOptions=None ):
+    # optionally, run through an initial analysis to "apply standard exclusions"  
+    if runOptions.configSettings.apply_standard_exclusions:
+        results = __analyze( runOptions )
+        exMods = results.obfuscatedMods
+        if len( exMods ) > 0:                    
+            exMods = [m for m in exMods if m in standardExclusions]
+        if len( exMods ) > 0: 
+            print( "Applying standard exclusions..." )        
+            try:    runOptions.configSettings.external_modules.extend( exMods )
+            except: runOptions.configSettings.external_modules = exMods
+                                        
+    return __main( runOptions )
 
-if (__name__ == '__main__') or isLibraryInvoked:
+def __analyze( runOptions ):
+    # allow for the same runOptions to work for both analyze and obfuscate                  
+    savedDryRun = runOptions.configSettings.dry_run    
+    runOptions.configSettings.dry_run = True
+    results = __main( runOptions )    
+    runOptions.configSettings.dry_run = savedDryRun
+    return results
+
+def __main( runOptions ):    
+    global obfuscatedFileDict, obfuscatedWordDict, obfuscatedModImports    
+    global skippedPublicSet, skipWordList
     
-    print ('{} (TM) Configurable Multi Module Python Obfuscator Version {}'.format (programName.capitalize (), __version__))
-    print ('Copyright (C) Geatec Engineering. License: Apache 2.0 at  http://www.apache.org/licenses/LICENSE-2.0\n')
+    global mainCount    
+    global stringIndex, commentIndex, stringNr
+    
+    if mainCount==0:
+        print ('{} (TM) Configurable Multi Module Python Obfuscator Version {}'.format (PROGRAM_NAME.capitalize (), __version__))
+        print ('Copyright (C) Geatec Engineering. License: Apache 2.0 at  http://www.apache.org/licenses/LICENSE-2.0\n')
+    mainCount+=1
+
+    if runOptions:
+        if runOptions.configSettings.dry_run:
+            print( "Analyzing: " )
+            print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
+            print( "configuration: \n%s"  % (runOptions.configSettings,) )                
+        else :
+            print( "Creating Obfuscation: " )
+            print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
+            print( "target directory: %s" % (runOptions.targetRootDirectory,) )
+            print( "config file path: %s" % (runOptions.configFilePath,) )
+            print( "configuration: \n%s"  % (runOptions.configSettings,) )    
+
+    opy_parser._reset()
 
     random.seed ()
 
@@ -79,7 +173,7 @@ if (__name__ == '__main__') or isLibraryInvoked:
             bin (obfuscationIndex) [2:] .replace ('0', 'l'),
             obfuscatedNameTail
         )
-        
+                    
     def scramble (stringLiteral):
         global stringNr
         
@@ -156,33 +250,31 @@ Licence:
 {3}
 ===============================================================================
 
-        '''.format (programName.capitalize (), programName, r'#', license))
+        '''.format (PROGRAM_NAME.capitalize (), PROGRAM_NAME, r'#', license))
         if errorLevel is not None: exit (errorLevel)
         
     # ============ Assign directories ============
 
-    isLibraryConfig = False
-    if isLibraryInvoked:
+    if runOptions:
         # Use library settings 
-        if settings.printHelp: printHelpAndExit(None)                   
+        if runOptions.printHelp: printHelpAndExit(None)                   
                     
-        if settings.sourceRootDirectory is not None:                    
-            sourceRootDirectory = settings.sourceRootDirectory.replace ('\\', '/')
+        if runOptions.sourceRootDirectory is not None:                    
+            sourceRootDirectory = runOptions.sourceRootDirectory.replace ('\\', '/')
         else:
             sourceRootDirectory = os.getcwd () .replace ('\\', '/')
 
-        if settings.targetRootDirectory is not None:
-            targetRootDirectory = settings.targetRootDirectory.replace ('\\', '/')
+        if runOptions.targetRootDirectory is not None:
+            targetRootDirectory = runOptions.targetRootDirectory.replace ('\\', '/')
         else:
-            targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [programName]))
+            targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
 
-        if settings.configFilePath==False :
-            isLibraryConfig = True    
+        if runOptions.configFilePath==False :
             configFilePath = ""
-        elif settings.configFilePath is not None:
-            configFilePath = settings.configFilePath.replace ('\\', '/')
+        elif runOptions.configFilePath is not None:
+            configFilePath = runOptions.configFilePath.replace ('\\', '/')
         else:
-            configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, programName)    
+            configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, PROGRAM_NAME)    
     else:
         # Use command line arguments
         if len (sys.argv) > 1:
@@ -196,17 +288,23 @@ Licence:
         if len (sys.argv) > 2:
             targetRootDirectory = sys.argv [2] .replace ('\\', '/')
         else:
-            targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [programName]))
+            targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
 
         if len (sys.argv) > 3:
             configFilePath = sys.argv [3] .replace ('\\', '/')
         else:
-            configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, programName)
+            configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, PROGRAM_NAME)
             
     # =========== Read config file
 
-    if isLibraryConfig:
-        configFile = settings.configSettings.toVirtualFile()
+    global obfuscate_strings, ascii_strings, obfuscated_name_tail
+    global plain_marker, pep8_comments, source_extensions, skip_extensions
+    global skip_path_fragments, external_modules, mask_external_modules
+    global skip_public, plain_files, plain_names, dry_run, prepped_only
+    global subset_files
+
+    if configFilePath=="":
+        configFile = runOptions.configSettings.toVirtualFile()
     else :        
         try:
             configFile = open (configFilePath)
@@ -214,7 +312,7 @@ Licence:
             print (exception)
             printHelpAndExit (1)
         
-    exec (configFile.read ())
+    exec (configFile.read (), globals())
     configFile.close ()
     
     def getConfig (parameter, default):
@@ -226,7 +324,7 @@ Licence:
     obfuscateStrings = getConfig ('obfuscate_strings', False)
     asciiStrings = getConfig ('ascii_strings', False)
     obfuscatedNameTail = getConfig ('obfuscated_name_tail', '_{}_')
-    plainMarker = getConfig ('plain_marker', '_{}_'.format (programName))
+    plainMarker = getConfig ('plain_marker', '_{}_'.format (PROGRAM_NAME))
     pep8Comments = getConfig ('pep8_comments', True)
     sourceFileNameExtensionList = getConfig ('source_extensions.split ()', ['py', 'pyx'])
     skipFileNameExtensionList = getConfig ('skip_extensions.split ()', ['pyc'])
@@ -297,14 +395,14 @@ Licence:
                 r'(?<!")',
                 r'  # '  # According to PEP8 an inline comment should start like this.
             ), re.MULTILINE) # @UndefinedVariable
-        if pep8_comments else  # @UndefinedVariable
+        if pep8Comments else  
             re.compile (r'{0}{1}{2}.*?$'.format (
                 r"(?<!')",
                 r'(?<!")',
                 r'#'
             ), re.MULTILINE) # @UndefinedVariable
     )
-    commentPlaceholder = '_{0}_c_'.format (programName)
+    commentPlaceholder = '_{0}_c_'.format (PROGRAM_NAME)
     commentPlaceholderRegEx = re.compile (r'{0}'.format (commentPlaceholder))
 
     # ============ Define string swapping tools
@@ -336,7 +434,7 @@ Licence:
         r'".*?(?<![^\\]\\)"'
     ), re.MULTILINE | re.DOTALL | re.VERBOSE) # @UndefinedVariable
 
-    stringPlaceholder = '_{0}_s_'.format (programName)
+    stringPlaceholder = '_{0}_s_'.format (PROGRAM_NAME)
     stringPlaceholderRegEx = re.compile (r'{0}'.format (stringPlaceholder))
 
     # ============ Define 'from future' moving tools
@@ -369,7 +467,7 @@ Licence:
     chrRegEx = re.compile (r'\bchr\b')
 
     # =========== Generate skip list
-
+    
     skipWordSet = set (keyword.kwlist + ['__init__'] + extraPlainWordList)  # __init__ should be in, since __init__.py is special
     if not isPython2: skipWordSet.update( ['unicode', 'unichr' ] ) # not naturally kept in clear text when obfuscation is produced in Python 3
 
@@ -638,18 +736,27 @@ import {0} as currentModule
     print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
     print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
     print ('')
+    print ('>>> Obfuscation Details:')            
+    print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
+    print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
+    print ('Masked identifiers: {0}'.format ( opy_parser.maskedIdentifiers ))
+    print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
+    print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
+    print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
+    print ('')    
     
-    if dryRun:
-        print ('>>> Obfuscation Details:')            
-        print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
-        print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
-        print ('Masked identifiers: {0}'.format ( opy_parser.maskedIdentifiers ))
-        print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
-        print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
-        print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
-        print ('')    
+    results = OpyResults()    
+    results.obfuscatedFiles = obfuscatedFileDict
+    results.obfuscatedIds   = obfuscatedWordDict   
+    results.obfuscatedMods  = opy_parser.obfuscatedModImports    
+    results.maskedIds       = opy_parser.maskedIdentifiers
+    results.clearTextMods   = opy_parser.clearTextModImports
+    results.clearTextPublic = skippedPublicSet        
+    results.clearTextIds    = skipWordList    
+    return results
+
+# Opyfying something twice can and is allowed to fail.
+# The obfuscation for e.g. variable 1 in round 1 can be the same as the obfuscation for e.g. variable 2 in round 2.
+# If in round 2 variable 2 is replaced first, the obfuscation from round 1 for variable 1 will be replaced by the same thing.
     
-    # Opyfying something twice can and is allowed to fail.
-    # The obfuscation for e.g. variable 1 in round 1 can be the same as the obfuscation for e.g. variable 2 in round 2.
-    # If in round 2 variable 2 is replaced first, the obfuscation from round 1 for variable 1 will be replaced by the same thing.
-    
+if __name__ == '__main__': __run()

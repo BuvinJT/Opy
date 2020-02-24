@@ -1,15 +1,7 @@
 import io
 import six
 
-isPython2 = six.PY2
-
-isLibraryInvoked    = False
-printHelp           = False
-sourceRootDirectory = None
-targetRootDirectory = None
-configFilePath      = None # None == default, False == use configSettings
-
-class ConfigSettings :
+class OpyConfig :
     """
     See opy_config.txt for details on these settings.
     """    
@@ -28,24 +20,11 @@ class ConfigSettings :
         ] 
         self.skip_path_fragments = [ 
              'opy_config.txt'
-            ,'opy_config.py' 
+            ,'opy_config.py'
+            ,'standard_exclusions.txt' 
         ]
-        self.external_modules = [
-             're'
-            ,'os'
-            ,'sys'
-            ,'io'
-            ,'errno'
-            ,'keyword'
-            ,'importlib'
-            ,'random'
-            ,'codecs'
-            ,'shutil'
-            ,'traceback'            
-            ,"collections"
-            ,"json"
-            ,"datetime" 
-        ]
+        self.apply_standard_exclusions = True
+        self.external_modules = []
         self.replacement_modules = {}
         self.plain_files = []
         self.plain_names = []
@@ -63,6 +42,7 @@ class ConfigSettings :
             + "plain_marker = '%s'\n" % self.plain_marker
             + "pep8_comments = %s\n" % str(self.pep8_comments)
             + "mask_external_modules = %s\n" % str(self.mask_external_modules)
+            + "apply_standard_exclusions = %s\n" % str(self.apply_standard_exclusions)
             + "skip_public = %s\n" % str(self.skip_public)
             + "dry_run = %s\n" % str(self.dry_run)
             + "prepped_only = %s\n" % str(self.prepped_only)            
@@ -95,6 +75,5 @@ class ConfigSettings :
         return text
 
     def toVirtualFile( self ):         
-        return io.StringIO( unicode(str(self)) if six.PY2 else str(self) )         
-    
-configSettings = ConfigSettings()
+        return io.StringIO( 
+            str(self).decode('utf-8') if six.PY2 else str(self) )         
