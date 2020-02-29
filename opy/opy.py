@@ -49,7 +49,9 @@ def __fetchStandardExclusions():
     cleanList = list( set( cleanLines ) )
     return cleanList
 standardExclusions = __fetchStandardExclusions()
-   
+
+class OpyError( Exception ): pass
+       
 class OpyResults:
     def __init__(self):
         self.obfuscatedFiles = None
@@ -101,18 +103,37 @@ def printHelp():
     runOptions.printHelp = True
     __main( runOptions )   
 
-def __obfuscate( runOptions=None ):
-    # optionally, run through an initial analysis to "apply standard exclusions"  
-    if runOptions.configSettings.apply_standard_exclusions:
-        results = __analyze( runOptions )
-        exMods = results.obfuscatedMods
-        if len( exMods ) > 0:                    
-            exMods = [m for m in exMods if m in standardExclusions]
-        if len( exMods ) > 0: 
-            print( "Applying standard exclusions..." )        
-            try:    runOptions.configSettings.external_modules.extend( exMods )
-            except: runOptions.configSettings.external_modules = exMods
-                                        
+def __obfuscate( runOptions=None ):    
+    # first analyze, then auto configure OR error out if a problem is detected
+    isStandardExc = runOptions.configSettings.apply_standard_exclusions
+    isPreserve    = runOptions.configSettings.preserve_unresolved_imports    
+    analysis      = __analyze( runOptions )
+    obMods        = analysis.obfuscatedMods    
+    # ignore obfuscated mods which are included in the project            
+    if len( obMods ) > 0:
+        # TODO: Handle imports of child mods/packages... 
+        obFiles  = analysis.obfuscatedFiles.keys()        
+        projMods = [opy_parser.rootFileName(f) for f in obFiles]
+        obMods   = [m for m in obMods if m not in projMods]
+    # apply standard exclusions
+    if len( obMods ) > 0 and isStandardExc:                
+        stdEx  = [m for m in obMods if m in standardExclusions]
+        obMods = [m for m in obMods if m not in stdEx]
+        if len( stdEx ) > 0: 
+            print( "Applying standard exclusions...\n" )        
+            try:    runOptions.configSettings.external_modules.extend( stdEx )
+            except: runOptions.configSettings.external_modules = stdEx
+    # handle unresolved imports
+    if len( obMods ) > 0:                                
+        if isPreserve:
+            for m in obMods: print( "WARNING - unresolved import: %s" % (m,) )
+            print("")
+            try:    runOptions.configSettings.external_modules.extend( obMods )
+            except: runOptions.configSettings.external_modules = obMods
+        else:                    
+            raise OpyError( "Unresolved import(s): %s" % (",".join(obMods),) ) 
+    print("")
+    # run the main process     
     return __main( runOptions )
 
 def __analyze( runOptions ):
@@ -137,11 +158,11 @@ def __main( runOptions ):
 
     if runOptions:
         if runOptions.configSettings.dry_run:
-            print( "Analyzing: " )
+            print( ">>> ANALYZING: " )
             print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
             print( "configuration: \n%s"  % (runOptions.configSettings,) )                
         else :
-            print( "Creating Obfuscation: " )
+            print( ">>> OBFUSCATING: " )
             print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
             print( "target directory: %s" % (runOptions.targetRootDirectory,) )
             print( "config file path: %s" % (runOptions.configFilePath,) )

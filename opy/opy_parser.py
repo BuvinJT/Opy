@@ -1,6 +1,7 @@
 import re
 import ast
 import six 
+import os
 
 NEWLINE              = '\n'
 SPACE                = ' '    
@@ -47,6 +48,10 @@ def _resetAliases():
     _modReplace = {}
 
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
+
+def baseFileName( path ): return os.path.basename( path )
+
+def rootFileName( path ): return os.path.splitext( baseFileName( path ) )[0]
 
 def analyzeImports( fileContent, clearTextMods=[] ):
     __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )

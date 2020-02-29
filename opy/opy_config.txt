@@ -87,11 +87,24 @@ external_modules = '''
 #====================================================================================================
 # *** BETA FEATURE ***
 #
-# If enabled, the module / libraries listed in the standard_exclusions.txt file will be
+# If enabled, the modules / libraries listed in the standard_exclusions.txt file will be
 # referrenced automatically to build upon the external_modules list provided.  
 #
 #====================================================================================================
 apply_standard_exclusions = True
+
+#====================================================================================================
+# *** BETA FEATURE ***
+#
+# If enabled, the modules / libraries imported which cannot be found within the project
+# or otherwise resolved as an explictly listed external module (or "standard exclusion"
+# when applicable), will be preserved in clear text. This generally ensures the obfuscated
+# code will function, though reduces the degree of overall obfuscation.  When this
+# is disabled, the obfuscation process will raise an exception when such an import is 
+# encountered, thereby forcing a manual correction / explicit configuration to handle it.  
+#
+#====================================================================================================
+preserve_unresolved_imports = True
 
 #====================================================================================================
 # *** BETA FEATURE ***

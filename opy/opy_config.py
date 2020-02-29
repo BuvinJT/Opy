@@ -24,6 +24,7 @@ class OpyConfig :
             ,'standard_exclusions.txt' 
         ]
         self.apply_standard_exclusions = True
+        self.preserve_unresolved_imports = True
         self.external_modules = []
         self.replacement_modules = {}
         self.plain_files = []
@@ -43,6 +44,7 @@ class OpyConfig :
             + "pep8_comments = %s\n" % str(self.pep8_comments)
             + "mask_external_modules = %s\n" % str(self.mask_external_modules)
             + "apply_standard_exclusions = %s\n" % str(self.apply_standard_exclusions)
+            + "preserve_unresolved_imports = %s\n" % str(self.preserve_unresolved_imports)
             + "skip_public = %s\n" % str(self.skip_public)
             + "dry_run = %s\n" % str(self.dry_run)
             + "prepped_only = %s\n" % str(self.prepped_only)            
