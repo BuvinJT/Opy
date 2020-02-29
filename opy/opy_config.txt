@@ -99,12 +99,20 @@ apply_standard_exclusions = True
 # If enabled, the modules / libraries imported which cannot be found within the project
 # or otherwise resolved as an explictly listed external module (or "standard exclusion"
 # when applicable), will be preserved in clear text. This generally ensures the obfuscated
-# code will function, though reduces the degree of overall obfuscation.  When this
-# is disabled, the obfuscation process will raise an exception when such an import is 
-# encountered, thereby forcing a manual correction / explicit configuration to handle it.  
+# code will function, though reduces the degree of overall obfuscation.    
 #
 #====================================================================================================
 preserve_unresolved_imports = True
+
+#====================================================================================================
+# *** BETA FEATURE ***
+#
+# If enabled, an exception will be raise when any unresolved imports are encountered
+# and still remain after the other mechanism for handling such have been exhuasted. 
+# Such thereby forces a manual correction / explicit configuration to handle the problem.  
+#
+#====================================================================================================
+error_on_unresolved_imports = True
 
 #====================================================================================================
 # *** BETA FEATURE ***

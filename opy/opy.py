@@ -106,7 +106,8 @@ def printHelp():
 def __obfuscate( runOptions=None ):    
     # first analyze, then auto configure OR error out if a problem is detected
     isStandardExc = runOptions.configSettings.apply_standard_exclusions
-    isPreserve    = runOptions.configSettings.preserve_unresolved_imports    
+    isPreserving  = runOptions.configSettings.preserve_unresolved_imports
+    isThrowing    = runOptions.configSettings.error_on_unresolved_imports    
     analysis      = __analyze( runOptions )
     obMods        = analysis.obfuscatedMods    
     # ignore obfuscated mods which are included in the project            
@@ -125,12 +126,12 @@ def __obfuscate( runOptions=None ):
             except: runOptions.configSettings.external_modules = stdEx
     # handle unresolved imports
     if len( obMods ) > 0:                                
-        if isPreserve:
+        if isPreserving:
             for m in obMods: print( "WARNING - unresolved import: %s" % (m,) )
             print("")
             try:    runOptions.configSettings.external_modules.extend( obMods )
             except: runOptions.configSettings.external_modules = obMods
-        else:                    
+        elif isThrowing:                    
             raise OpyError( "Unresolved import(s): %s" % (",".join(obMods),) ) 
     print("")
     # run the main process     
