@@ -53,6 +53,8 @@ def baseFileName( path ): return os.path.basename( path )
 
 def rootFileName( path ): return os.path.splitext( baseFileName( path ) )[0]
 
+def rootImportName( modName ): return modName.split(".")[0]
+
 def analyzeImports( fileContent, clearTextMods=[] ):
     __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )
 

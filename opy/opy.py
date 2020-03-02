@@ -81,12 +81,14 @@ def obfuscate( sourceRootDirectory = None
     runOptions.targetRootDirectory = targetRootDirectory
     runOptions.configSettings      = configSettings
     runOptions.configFilePath = ( 
-        configFilePath if configSettings is None else False )        
-    return __obfuscate( runOptions )
+        configFilePath if configSettings is None else False )
+    __autoConfig( runOptions, True )    
+    return __main( runOptions )
     
 def analyze( sourceRootDirectory = None
            , configSettings      = OpyConfig()
-           , fileList            = []             
+           , fileList            = []
+           , isVerbose           = True             
            ):    
     runOptions = RunOptions()
     runOptions.printHelp           = False
@@ -96,19 +98,20 @@ def analyze( sourceRootDirectory = None
     runOptions.configSettings = copy.copy( configSettings )    
     if fileList and len(fileList) > 0:
         runOptions.configSettings.subset_files = fileList
-    return __analyze( runOptions )
+    __autoConfig( runOptions, isVerbose )        
+    return __analyze( runOptions, isVerbose )
 
 def printHelp():    
     runOptions = RunOptions()
     runOptions.printHelp = True
     __main( runOptions )   
-
-def __obfuscate( runOptions=None ):    
+        
+def __autoConfig( runOptions, isVerbose ):    
     # first analyze, then auto configure OR error out if a problem is detected
     isStandardExc = runOptions.configSettings.apply_standard_exclusions
     isPreserving  = runOptions.configSettings.preserve_unresolved_imports
     isThrowing    = runOptions.configSettings.error_on_unresolved_imports    
-    analysis      = __analyze( runOptions )
+    analysis      = __analyze( runOptions, isVerbose=False )
     obMods        = analysis.obfuscatedMods    
     # ignore obfuscated mods which are included in the project            
     if len( obMods ) > 0:
@@ -117,47 +120,50 @@ def __obfuscate( runOptions=None ):
         projMods = [opy_parser.rootFileName(f) for f in obFiles]
         obMods   = [m for m in obMods if m not in projMods]
     # apply standard exclusions
-    if len( obMods ) > 0 and isStandardExc:                
-        stdEx  = [m for m in obMods if m in standardExclusions]
+    if len( obMods ) > 0 and isStandardExc:                         
+        stdEx  = [m for m in obMods 
+                  if m in standardExclusions
+                  or opy_parser.rootImportName(m) in standardExclusions] 
         obMods = [m for m in obMods if m not in stdEx]
         if len( stdEx ) > 0: 
-            print( "Applying standard exclusions...\n" )        
+            if isVerbose: 
+                print( "Standard exclusions found: %s" % (",".join(stdEx),) )   
             try:    runOptions.configSettings.external_modules.extend( stdEx )
             except: runOptions.configSettings.external_modules = stdEx
     # handle unresolved imports
     if len( obMods ) > 0:                                
         if isPreserving:
-            for m in obMods: print( "WARNING - unresolved import: %s" % (m,) )
-            print("")
+            if isVerbose: 
+                for m in obMods: 
+                    print( "WARNING unresolved import: %s" % (m,) )
+                print("")
             try:    runOptions.configSettings.external_modules.extend( obMods )
             except: runOptions.configSettings.external_modules = obMods
         elif isThrowing:                    
             raise OpyError( "Unresolved import(s): %s" % (",".join(obMods),) ) 
     print("")
-    # run the main process     
-    return __main( runOptions )
 
-def __analyze( runOptions ):
+def __analyze( runOptions, isVerbose ):
     # allow for the same runOptions to work for both analyze and obfuscate                  
     savedDryRun = runOptions.configSettings.dry_run    
     runOptions.configSettings.dry_run = True
-    results = __main( runOptions )    
+    results = __main( runOptions, isVerbose )    
     runOptions.configSettings.dry_run = savedDryRun
     return results
 
-def __main( runOptions ):    
+def __main( runOptions, isVerbose=True ):    
     global obfuscatedFileDict, obfuscatedWordDict, obfuscatedModImports    
     global skippedPublicSet, skipWordList
     
     global mainCount    
-    global stringIndex, commentIndex, stringNr
+    global stringIndex, commentIndex, stringNr, nrOfSpecialLines
     
     if mainCount==0:
         print ('{} (TM) Configurable Multi Module Python Obfuscator Version {}'.format (PROGRAM_NAME.capitalize (), __version__))
         print ('Copyright (C) Geatec Engineering. License: Apache 2.0 at  http://www.apache.org/licenses/LICENSE-2.0\n')
     mainCount+=1
 
-    if runOptions:
+    if runOptions and isVerbose:
         if runOptions.configSettings.dry_run:
             print( ">>> ANALYZING: " )
             print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
@@ -530,9 +536,10 @@ import {0} as currentModule
                     )
                     setattr (self, attributeName, currentModule)    # @UndefinedVariable
                 except Exception as exception:
-                    print (exception)
+                    if isVerbose: print (exception)
                     setattr (self, attributeName, None) # So at least the attribute name will be available
-                    print ('Warning: could not inspect external module {0}'.format (externalModuleName))
+                    if isVerbose: 
+                        print ('Warning: could not inspect external module {0}'.format (externalModuleName))
                 
     externalModules = ExternalModules ()
     externalObjects = set ()
@@ -748,24 +755,25 @@ import {0} as currentModule
                 opy_parser.maskedIdentifiers[ unMasked ] = obf                
                 break    
     for m in masks: obfuscatedWordDict.pop( m, None )
-
-    print ('>>> Obfuscation Summary:')                
-    print ('Target Root Directory: {0}'.format ( targetRootDirectory ))
-    print ('Obfuscated files: {0}'.format ( len(obfuscatedFileDict) ))
-    print ('Obfuscated identifiers: {0}'.format (len(obfuscatedWordDict)))
-    print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
-    print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
-    print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
-    print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
-    print ('')
-    print ('>>> Obfuscation Details:')            
-    print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
-    print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
-    print ('Masked identifiers: {0}'.format ( opy_parser.maskedIdentifiers ))
-    print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
-    print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
-    print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
-    print ('')    
+    
+    if isVerbose: 
+        print ('>>> Obfuscation Summary:')                
+        print ('Target Root Directory: {0}'.format ( targetRootDirectory ))
+        print ('Obfuscated files: {0}'.format ( len(obfuscatedFileDict) ))
+        print ('Obfuscated identifiers: {0}'.format (len(obfuscatedWordDict)))
+        print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
+        print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
+        print ('Obfuscated module references: {0}'.format (len(opy_parser.obfuscatedModImports)))                    
+        print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
+        print ('')
+        print ('>>> Obfuscation Details:')            
+        print ('Obfuscated files: {0}'.format ( obfuscatedFileDict ))
+        print ('Obfuscated identifiers: {0}'.format ( obfuscatedWordDict ))
+        print ('Masked identifiers: {0}'.format ( opy_parser.maskedIdentifiers ))
+        print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
+        print ('Obfuscated module references: {0}'.format (opy_parser.obfuscatedModImports))                    
+        print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
+        print ('')    
     
     results = OpyResults()    
     results.obfuscatedFiles = obfuscatedFileDict
@@ -781,4 +789,4 @@ import {0} as currentModule
 # The obfuscation for e.g. variable 1 in round 1 can be the same as the obfuscation for e.g. variable 2 in round 2.
 # If in round 2 variable 2 is replaced first, the obfuscation from round 1 for variable 1 will be replaced by the same thing.
     
-if __name__ == '__main__': __run()
+if __name__ == '__main__': __main()
