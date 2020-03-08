@@ -49,11 +49,23 @@ def _resetAliases():
 
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
 
+#----------------------
+
 def baseFileName( path ): return os.path.basename( path )
 
 def rootFileName( path ): return os.path.splitext( baseFileName( path ) )[0]
 
-def rootImportName( modName ): return modName.split(".")[0]
+def rootImportName( modName ): return modName.split( SUB_MOD_DELIM )[0]
+   
+def toPackageName( relPath ): 
+    return relPath.replace( "/", SUB_MOD_DELIM ).replace( "\\" , SUB_MOD_DELIM)
+
+def toProjectSubPackage( relPath ):    
+    names = toPackageName( relPath ).split(SUB_MOD_DELIM)
+    if len(names)==1: return None
+    return names[0]
+
+#----------------------
 
 def analyzeImports( fileContent, clearTextMods=[] ):
     __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )
