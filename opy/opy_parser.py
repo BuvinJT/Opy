@@ -21,6 +21,8 @@ SET_ALIAS_TEMPLATE = "%s as %s"
 CONTINUED_TEMPLATE = "%s%s%s"
 LONG_LINE_TEMPLATE = "%s%s"
 
+class __PositiveException( Exception ): pass
+
 # -----------------------------------------------------------------------------
 obfuscatedModImports = set()
 clearTextModImports  = set()
@@ -80,7 +82,8 @@ def __parseImports( fileContent, mode,
     # See: https://stackoverflow.com/a/9049549/3220983
     def __yieldImport( fileContent ):
         root = ast.parse( fileContent )           
-        for node in ast.iter_child_nodes( root ):
+        for node in ast.walk( root ):
+            #print(node)
             if   isinstance( node, ast.Import ): module = []
             elif isinstance( node, ast.ImportFrom ):  
                 module = node.module.split( SUB_MOD_DELIM )
@@ -107,8 +110,11 @@ def __parseImports( fileContent, mode,
             if mod in modFilter : 
                 imp      = MEMBER_DELIM.join( d.name ) 
                 idx      = d.lineno-1        
-                line     = lines[ idx ]             
-                alias    = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
+                line     = lines[ idx ]                             
+                try:    
+                    if useGlobal: alias = maskedIdentifiers[imp]
+                    else: raise __PositiveException()
+                except: alias = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
                 setAlias = SET_ALIAS_TEMPLATE % ( imp, alias )
                 regEx    = re.compile( IDENTIFIER_REGEX.format( imp ) )                                        
                 lines[ idx ] = regEx.sub( setAlias, line )  
@@ -261,14 +267,10 @@ def __private(): return __z
 """    
 from sys import stdout
 # cross environment Tkinter import    
-try:    
-    from tkinter import Tk 
-except: 
-    from Tkinter import Tk
-try:    
-    from tkinter.ttk import Button 
-except: 
-    from ttk import Button
+try:    from tkinter import Tk 
+except: from Tkinter import Tk
+try:    from tkinter.ttk import Button 
+except: from ttk import Button
 
 def onClick(): 
     stdout.write( "Hello!\\n" )
