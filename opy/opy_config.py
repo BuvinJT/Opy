@@ -36,6 +36,31 @@ class OpyConfig :
         self.dry_run = False
         self.prepped_only = False        
 
+    def _clean( self ):
+        
+        def _toCleanStr( s, default="" ):
+            if not isinstance( s, six.string_types ): return default
+            s = s.strip("")
+            if s=="": return default
+            return s
+
+        def _toCleanStrList( l ):
+            try:    
+                ret = list(set(l))
+                ret = [str(x).strip() for x in ret if x is not None]
+                ret = [x for x in ret if len(x) != 0]
+                return ret 
+            except: return []
+
+        self.plain_marker        = _toCleanStr( self.plain_marker, '_opy_' )          
+        self.source_extensions   = _toCleanStrList( self.source_extensions )
+        self.skip_extensions     = _toCleanStrList( self.skip_extensions )
+        self.skip_path_fragments = _toCleanStrList( self.skip_path_fragments )
+        self.external_modules    = _toCleanStrList( self.external_modules )
+        self.plain_files         = _toCleanStrList( self.plain_files )
+        self.plain_names         = _toCleanStrList( self.plain_names )
+        self.subset_files        = _toCleanStrList( self.subset_files )
+        
     def __str__( self ):
         # TODO : rewrite this in a more clean/clever manner... 
         text = ( 

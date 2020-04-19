@@ -2,34 +2,29 @@ import re
 import ast
 import six 
 import os
+import collections
 
-NEWLINE              = '\n'
-SPACE                = ' '    
-CONTINUATION         = "\\"
-TAB                  = '\t'
-IMPORT_PREFIX        = "import "
-FROM_PREFIX          = "from "
-AS_KEYWORD           = "as"
-MEMBER_DELIM = SUB_MOD_DELIM = "."
-LIST_DELIM           = ","        
-ALIAS_TEMPLATE       = "alias_%d"  
-SET_ALIAS_TEMPLATE   = "%s as %s"
-IMPORT_TEMPLATE      = "%simport %s"
-FROM_TEMPLATE        = "%sfrom %s import %s"  
+NEWLINE      = '\n'
+SPACE        = ' '    
+TAB          = '\t'
+CONTINUATION = "\\"
+
 IDENTIFIER_REGEX     = r'\b{0}\b'
 IDENTIFIER_DOT_REGEX = r'\b{0}\.\b'
-CONTINUED_TEMPLATE   = "%s%s%s"
-LONG_LINE_TEMPLATE   = "%s%s"
-MAGIC_PREFFIX = MAGIC_SUFFIX = PRIVATE_PREFIX = "__"
-WILDCARD             = "*"
+
+MEMBER_DELIM = SUB_MOD_DELIM = '.'
+MAGIC_PREFFIX = MAGIC_SUFFIX = PRIVATE_PREFIX = '__'
+        
+ALIAS_TEMPLATE     = "alias_%d"  
+SET_ALIAS_TEMPLATE = "%s as %s"
+
+CONTINUED_TEMPLATE = "%s%s%s"
+LONG_LINE_TEMPLATE = "%s%s"
 
 # -----------------------------------------------------------------------------
 obfuscatedModImports = set()
 clearTextModImports  = set()
 maskedIdentifiers    = {}
-_modAliases = {}
-_mbrAliases = {} 
-_modReplace = {}
 
 def _reset():
     global obfuscatedModImports, clearTextModImports, maskedIdentifiers    
@@ -37,19 +32,196 @@ def _reset():
     obfuscatedModImports = set()
     clearTextModImports  = set()
     maskedIdentifiers    = {}
-    _modAliases = {}
-    _mbrAliases = {} 
-    _modReplace = {}
 
-def _resetAliases():
-    global _modAliases, _mbrAliases, _modReplace
-    _modAliases = {}
-    _mbrAliases = {} 
-    _modReplace = {}
-
+# -----------------------------------------------------------------------------
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
 
-#----------------------
+def analyzeImports( fileContent, clearTextMods=[] ):
+    __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )
+
+def injectAliases( fileContent, clearTextMods=[] ):
+    return __parseImports( fileContent, __MASK_MODE, clearTextMods )
+
+def replaceModNames( fileContent, replacements={} ):
+    return __parseImports( fileContent, __REPLACE_MODE, replacements=replacements )
+
+def __parseImports( fileContent, mode, 
+                    clearTextNames=[], replacements={} ):    
+
+    __parseImports.Import = collections.namedtuple(
+            "Import", [ "module", "name", "alias", "lineno" ] ) 
+
+    def main( fileContent, mode, clearTextNames, replacements ):
+    
+        importDetails = __catalogImports( fileContent, clearTextNames )
+        #print( importDetails )
+        if mode == __ANALIZE_MODE : return None
+        
+        lines = __toLines( fileContent, combineContinued=True )       
+        if mode==__MASK_MODE :
+            __assignAliasesToImports( lines, importDetails ) 
+            __replaceIdentifiers( lines, importDetails )
+        elif mode == __REPLACE_MODE: 
+            __replaceModNames( lines, importDetails, replacements )
+        return NEWLINE.join( lines )
+
+    def __catalogImports( fileContent, clearTextNames ):
+        global obfuscatedModImports, clearTextModImports
+        details = [ imp for imp in __yieldImport( fileContent ) ]                
+        # update (simple) global mod name sets 
+        mods = [ __detailToMod( d ) for d in details ]
+        for m in mods: 
+            if m in clearTextNames: clearTextModImports.add(  m )
+            else :                  obfuscatedModImports.add( m )        
+        return details
+        
+    # "GENERATOR" function, to be called in a loop
+    # Returns a detailed accounting of parsed results
+    # See: https://stackoverflow.com/a/9049549/3220983
+    def __yieldImport( fileContent ):
+        root = ast.parse( fileContent )           
+        for node in ast.iter_child_nodes( root ):
+            if   isinstance( node, ast.Import ): module = []
+            elif isinstance( node, ast.ImportFrom ):  
+                module = node.module.split( SUB_MOD_DELIM )
+            else: continue        
+            for n in node.names:                
+                yield __parseImports.Import( 
+                    module, n.name.split( MEMBER_DELIM ), n.asname, 
+                    node.lineno )
+                # Execution resumes here (with the locals preserved!) 
+                # on the next call to this function per the magic of "yeild"...
+                
+    def __assignAliasesToImports( lines, importDetails, modFilter=set() ):
+        """ modifies lines by referrence
+            conditionally modifies global maskedIdentifiers, 
+            pass a modFilter to use this in "local mode"   
+        """
+        global maskedIdentifiers
+        newAliases={}        
+        useGlobal = len(modFilter)==0
+        if useGlobal: modFilter = clearTextModImports
+        for d in importDetails :          
+            if d.alias : continue  
+            mod = __detailToMod( d )
+            if mod in modFilter : 
+                imp      = MEMBER_DELIM.join( d.name ) 
+                idx      = d.lineno-1        
+                line     = lines[ idx ]             
+                alias    = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
+                setAlias = SET_ALIAS_TEMPLATE % ( imp, alias )
+                regEx    = re.compile( IDENTIFIER_REGEX.format( imp ) )                                        
+                lines[ idx ] = regEx.sub( setAlias, line )  
+                newAliases[ imp ] = alias
+                if useGlobal: maskedIdentifiers[ imp ] = alias
+        return newAliases
+                   
+    def __replaceIdentifiers( lines, importDetails, replacements={}, 
+                              includeImportLines=False ): 
+        """ modifies lines by referrence
+            uses global maskedIdentifiers by default,
+            else the "override" aliases parameter                 
+        """
+        if len(replacements)==0: replacements=maskedIdentifiers
+        nakedRegExs={}
+        trailingDotRegExs={}        
+        for oldName in replacements :
+            nakedRegExs[oldName] = ( 
+                re.compile( IDENTIFIER_REGEX.format( oldName ) ) ) 
+            trailingDotRegExs[oldName] = ( 
+                re.compile( IDENTIFIER_DOT_REGEX.format( oldName ) ) )            
+        ignoreLineNos = ( [] if includeImportLines else 
+                          [ d.lineno for d in importDetails ] )
+        for idx, line in enumerate( lines ):
+            lineno = idx+1            
+            if lineno not in ignoreLineNos:
+                for oldName, newName in six.iteritems( replacements ):
+                    line = nakedRegExs[oldName].sub( newName, line )
+                    line = trailingDotRegExs[oldName].sub( newName + MEMBER_DELIM, line )
+                    lines[idx] = line
+
+    def __replaceModNames( lines, importDetails, replacements ):
+        """ modifies lines by referrence """
+        validated={}
+        for oldName, newName in six.iteritems( replacements ):         
+            for d in importDetails :          
+                mod = __detailToMod( d )
+                if mod == oldName :
+                    validated[oldName]=newName               
+                    break      
+        __replaceIdentifiers( lines, importDetails, 
+            replacements=validated, includeImportLines=True )             
+
+    def __detailToMod( d ):
+        return MEMBER_DELIM.join( d.module if len(d.module) > 0 else d.name ) 
+         
+    def __toLines( fileContent, combineContinued=False ):
+        lines = fileContent.split( NEWLINE )
+        if combineContinued :
+            revLines = []
+            longLine = ""
+            for l in lines:
+                if l.rstrip().endswith( CONTINUATION ):
+                    longLine = ( CONTINUED_TEMPLATE % 
+                        (longLine, l.rstrip()[:-1], SPACE ) )
+                else :            
+                    longLine = LONG_LINE_TEMPLATE % (longLine, l)
+                    revLines.append( longLine )
+                    longLine = ""
+            lines = revLines
+        return lines 
+
+    return main( fileContent, mode, clearTextNames, replacements )
+
+# ----------------------------------------------------------------------------- 
+def findPublicIdentifiers( fileContent ):
+
+    def main():
+        publicIds=set()
+        root = ast.parse( fileContent )    
+        publicIds.update( __findAstPublicNameAssigns( root ) )
+        publicIds.update( __findAstPublicFuncsClassesAttribs( root ) )
+        return publicIds
+
+    # recursive
+    def __findAstPublicFuncsClassesAttribs( node ):
+        publicNodes = set()    
+        for child in ast.iter_child_nodes( node ):       
+            if( isinstance( child, ast.FunctionDef ) or 
+                isinstance( child, ast.ClassDef ) ):            
+                if __isPrivatePrefix( child.name ) : continue                        
+                publicNodes.add( child.name ) 
+                publicNodes.update( __findAstPublicAttribAssigns( child ) )            
+                publicNodes.update( __findAstPublicFuncsClassesAttribs( child ) )
+        return publicNodes
+    
+    def __findAstPublicAttribAssigns( node ):
+        publicNodes = set()    
+        for child in ast.iter_child_nodes( node ):
+            if isinstance( child, ast.Assign ):
+                for target in child.targets :
+                    if isinstance( target, ast.Attribute ) :        
+                        if not __isPrivatePrefix( target.attr ):    
+                            publicNodes.add( target.attr )
+        return publicNodes
+    
+    def __findAstPublicNameAssigns( node ):
+        publicNodes = []    
+        for child in ast.iter_child_nodes( node ):
+            if isinstance( child, ast.Assign ):
+                for target in child.targets :
+                    if isinstance( target, ast.Name ) :
+                        if not __isPrivatePrefix( target.id ):    
+                            publicNodes.append( target.id )
+        return publicNodes
+    
+    def __isPrivatePrefix( identifier ):
+        return ( identifier.startswith( PRIVATE_PREFIX )
+                 and not identifier.endswith( MAGIC_SUFFIX ) )
+
+    return main()
+
+# -----------------------------------------------------------------------------
 
 def baseFileName( path ): return os.path.basename( path )
 
@@ -65,261 +237,66 @@ def toProjectSubPackage( relPath ):
     if len(names)==1: return None
     return names[0]
 
-#----------------------
-
-def analyzeImports( fileContent, clearTextMods=[] ):
-    __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )
-
-def injectAliases( fileContent, clearTextMods ):
-    return __parseImports( fileContent, __MASK_MODE, clearTextMods )
-
-def replaceImports( fileContent, replacements={} ):
-    return __parseImports( fileContent, __REPLACE_MODE, replacements=replacements )
-
-# TODO: Rewrite using the ast module. See findPublicIdentifiers()...
-def __parseImports( fileContent, mode, clearTextMods=[], replacements={} ):
-    """
-    This function has multiple modes of operation: 
-    
-    __ANALIZE_MODE 
-        Simply find imports and populate the global collections for the results 
-        
-    __MASK_MODE 
-        Provide aliases for the non-obfuscated imports modules and objects 
-        (i.e. clearTextMods). Those aliases then become obfuscated, 
-        by Opy implicitly, thereby making the code a bit more 
-        difficult to read... 
-        (of course it's not too hard to de-obfuscate that!)
-
-    __REPLACE_MODE        
-                
-    """
-    
-    _resetAliases()
-    global _modReplace
-    _modReplace=replacements
-
-    def isImportLn( line ):
-        # multi-line strings/comments should have been isolated
-        # from the fileContent before this was called
-        stripped = line.strip()
-        isImportLine = stripped.startswith( IMPORT_PREFIX )
-        isFromLine = stripped.startswith( FROM_PREFIX )
-        isEither = (isImportLine or isFromLine) 
-        return isEither, isImportLine, isFromLine
-        
-    def isClearTextMod( modName ):
-        modSubs = modName.split( SUB_MOD_DELIM )
-        subMod = ""
-        for sub in modSubs:                
-            subMod += sub if subMod == "" else (SUB_MOD_DELIM + sub)
-            if subMod in clearTextMods: return True
-        return False                        
-
-    def replaceModKey( modName ):
-        modSubs = modName.split( SUB_MOD_DELIM )
-        subMod = ""
-        for sub in modSubs:                
-            subMod += sub if subMod == "" else (SUB_MOD_DELIM + sub)
-            if subMod in _modReplace: return subMod
-        return None                        
-    
-    def processLine( line, mode ):
-        global obfuscatedModImports, clearTextModImports, maskedIdentifiers, \
-            _modAliases, _mbrAliases, _modReplace
-        # determine if this is an import/from line
-        stripped = line.strip()
-        _, isImportLine, isFromLine = isImportLn( line )
-        replaceKey = None
-        # If it is an import/from line, split off the items 
-        # part of it, and remove any extra spaces in that. 
-        # Skip to the next line if there are no import items 
-        # to parse.
-        if isImportLine :                           
-            try: itemsPart = SPACE.join( stripped.split( SPACE )[1:] )     
-            except: return line
-        elif isFromLine:
-            tokens = stripped.split( SPACE )                
-            try:
-                # on a from line, if the module name is not 
-                # being replaced or preserved, skip the entire line                 
-                modName = tokens[1]                     
-                if mode==__REPLACE_MODE:
-                    replaceKey = replaceModKey( modName )
-                    if replaceKey is None : return line
-                    # replace the leading portions of the module name only
-                    # preserving any sub module names which may follow                    
-                    modName = modName.replace( replaceKey, 
-                                               _modReplace[replaceKey] )        
-                else:
-                    if isClearTextMod( modName ):
-                        clearTextModImports.add( modName )
-                    else :
-                        obfuscatedModImports.add( modName ) 
-                        return line                                                
-                itemsPart = SPACE.join( tokens[3:] )     
-            except: return line
-        else: return line               
-        # split & strip all the import items 
-        items = itemsPart.split( LIST_DELIM )
-        normList = [i.strip() for i in items]
-        revisedImports=[]
-        for item in normList :
-            # tokenize the list item 
-            tokens = item.split( SPACE )
-            importName = tokens[0]
-            if importName==WILDCARD:
-                revisedImports.append( item ) 
-                continue
-            if isImportLine :
-                modName = importName
-                # on an import line, if the module name is not  
-                # being replaced or preserved, skip the item                                   
-                if mode==__REPLACE_MODE:
-                    replaceKey = replaceModKey( modName )
-                    isSkipped = replaceKey is None 
-                else:
-                    isSkipped = not isClearTextMod( modName )
-                    if isSkipped : obfuscatedModImports.add( modName )
-                    else: clearTextModImports.add( modName )     
-                if isSkipped :
-                    revisedImports.append( item )
-                    continue                           
-            # determine if the import is aliased
-            try   : isAliased = tokens[1]==AS_KEYWORD
-            except: isAliased = False
-            if mode==__REPLACE_MODE:
-                if isImportLine :
-                    # replace the leading portions of the module name only
-                    # preserving any sub module names which may follow                    
-                    replacement = importName.replace( replaceKey, 
-                                                      _modReplace[replaceKey] )                    
-                    # replace the module name and either preserve an 
-                    # existing alias, or alias it be the original name 
-                    # if it doesn't have one
-                    if isAliased :                
-                        try   : alias = tokens[2]
-                        except: alias = ""
-                    else : alias = importName
-                    item = SET_ALIAS_TEMPLATE % ( replacement, alias )
-            else :
-                # give the import an alias if it doesn't have one                
-                if not isAliased:
-                    try: alias = maskedIdentifiers[ importName ]
-                    except: 
-                        alias = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
-                        maskedIdentifiers[ importName ]=alias                                              
-                    if isImportLine: _modAliases[importName]=alias
-                    else:            _mbrAliases[importName]=alias
-                    item = SET_ALIAS_TEMPLATE % ( importName, alias )        
-            revisedImports.append( item )          
-        # re-build the line                                                        
-        leadSpaces = SPACE * (len(line) - len(line.lstrip(SPACE)))
-        itemsPart = LIST_DELIM.join( revisedImports )    
-        line = ( (IMPORT_TEMPLATE % (leadSpaces, itemsPart))
-                 if isImportLine else
-                 (FROM_TEMPLATE % 
-                   (leadSpaces, modName, itemsPart)) )
-        return line
-
-    def applyAliases( lines ): 
-        #TODO: trim this down. It functions, but it's ugly...
-        nakedAliasesRegEx={}
-        dotAliasesRegEx={}        
-        for name in maskedIdentifiers :
-            nakedAliasesRegEx[name] = ( 
-                re.compile( IDENTIFIER_REGEX.format( name ) ) ) 
-        for name in maskedIdentifiers :
-            dotAliasesRegEx[name] = ( 
-                re.compile( IDENTIFIER_DOT_REGEX.format( name ) ) ) 
-        revLines = []   
-        for line in lines:
-            if not isImportLn( line )[0]:
-                for name, regEx in six.iteritems( dotAliasesRegEx ):
-                    modAlias = _modAliases.get(name)
-                    mbrAlias = _mbrAliases.get(name)                    
-                    if mbrAlias: line = regEx.sub( mbrAlias + MEMBER_DELIM, line )
-                    elif modAlias: line = regEx.sub( modAlias + MEMBER_DELIM, line )                    
-                for name, regEx in six.iteritems( nakedAliasesRegEx ):
-                    modAlias = _modAliases.get(name)
-                    mbrAlias = _mbrAliases.get(name)                    
-                    if mbrAlias: line = regEx.sub( mbrAlias, line )
-                    elif modAlias: line = regEx.sub( modAlias, line )                    
-            revLines.append( line )
-        return revLines
-
-    # split the fileContent into lines and
-    # roll all lines broken via continuations
-    # into long single lines, thus eliminating that
-    # messy detail from any subsequent logic        
-    lines = __toLines( fileContent, combineContinued=True )       
-    if (mode==__MASK_MODE) or (mode==__REPLACE_MODE):
-        revLines = []
-        # find all imports and apply replacements / inject aliases                                    
-        for l in lines: revLines.append( processLine( l, mode ) )
-        # in mask mode, apply the aliases to original import names
-        if mode==__MASK_MODE : revLines = applyAliases( revLines )
-        # reassemble and return the revised lines                   
-        return NEWLINE.join( revLines )
-    else : # find the imports, but discard revisions  
-        for l in lines: processLine( l, mode ) 
-
-def __toLines( fileContent, combineContinued=False ):
-    lines = fileContent.split( NEWLINE )
-    if combineContinued :
-        revLines = []
-        longLine = ""
-        for l in lines:
-            if l.strip().endswith( CONTINUATION ):
-                longLine = ( CONTINUED_TEMPLATE % 
-                    (longLine, l.rstrip()[:-1], SPACE ) )
-            else :            
-                longLine = LONG_LINE_TEMPLATE % (longLine, l)
-                revLines.append( longLine )
-                longLine = ""
-        lines = revLines
-    return lines 
-
+# Basic Unit Tests 
 # -----------------------------------------------------------------------------
-def findPublicIdentifiers( fileContent ):
-    publicIds=set()
-    root = ast.parse( fileContent )    
-    publicIds.update( __findAstPublicNameAssigns( root ) )
-    publicIds.update( __findAstPublicFuncsClassesAttribs( root ) )
-    return publicIds
+if __name__ == '__main__': 
+    fileContent=(
+"""
+import ast 
+from os import system, sep as PATH_DELIM, \
+    remove as removeFile, \
+    fdopen, getcwd, chdir, walk, environ, devnull
+from os.path import exists
+    
+x = devnull
+_y = exists    
+__z = ast.Import
 
-# recursive
-def __findAstPublicFuncsClassesAttribs( node ):
-    publicNodes = set()    
-    for child in ast.iter_child_nodes( node ):       
-        if( isinstance( child, ast.FunctionDef ) or 
-            isinstance( child, ast.ClassDef ) ):            
-            if __isPrivatePrefix( child.name ) : continue                        
-            publicNodes.add( child.name ) 
-            publicNodes.update( __findAstPublicAttribAssigns( child ) )            
-            publicNodes.update( __findAstPublicFuncsClassesAttribs( child ) )
-    return publicNodes
+def public(): return x
+def _protected(): return _y
+def __private(): return __z
+""")
 
-def __findAstPublicAttribAssigns( node ):
-    publicNodes = set()    
-    for child in ast.iter_child_nodes( node ):
-        if isinstance( child, ast.Assign ):
-            for target in child.targets :
-                if isinstance( target, ast.Attribute ) :        
-                    if not __isPrivatePrefix( target.attr ):    
-                        publicNodes.add( target.attr )
-    return publicNodes
+    fileContent=(
+"""    
+from sys import stdout
+# cross environment Tkinter import    
+try:    
+    from tkinter import Tk 
+except: 
+    from Tkinter import Tk
+try:    
+    from tkinter.ttk import Button 
+except: 
+    from ttk import Button
 
-def __findAstPublicNameAssigns( node ):
-    publicNodes = []    
-    for child in ast.iter_child_nodes( node ):
-        if isinstance( child, ast.Assign ):
-            for target in child.targets :
-                if isinstance( target, ast.Name ) :
-                    if not __isPrivatePrefix( target.id ):    
-                        publicNodes.append( target.id )
-    return publicNodes
+def onClick(): 
+    stdout.write( "Hello!\\n" )
+    stdout.flush()
 
-def __isPrivatePrefix( identifier ):
-    return ( identifier.startswith( PRIVATE_PREFIX )
-             and not identifier.endswith( MAGIC_SUFFIX ) )
+mainWindow = Tk()
+Button( mainWindow, text="Hello TKinkter", command=onClick ).grid()
+mainWindow.mainloop()
+""")    
+    
+    analyzeImports( fileContent, clearTextMods=[] )
+    print( "obfuscated", obfuscatedModImports )
+    print( "clearText", clearTextModImports )
+    print( "masked", maskedIdentifiers )
+    
+    print( injectAliases( fileContent, clearTextMods=["ast","os","os.path"]  ) )
+    print( "masked", maskedIdentifiers )
+        
+    print( replaceModNames( fileContent, replacements={
+          "ast":"AST"
+        #, "os.path":"OS.PATH"      
+        , "os":"OS"      
+        , "path":"this should not appear!"       
+        , "system":"this should not appear!"      
+        , "fake":"this should not appear!"
+        , "PATH_DELIM":"this should not appear either!"    
+    }) )
+    
+    print( "PublicIdentifiers",
+           findPublicIdentifiers( fileContent ) )
+        

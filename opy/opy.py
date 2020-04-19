@@ -27,7 +27,7 @@ import shutil
 import six
 import copy
 
-DEBUG=False
+DEBUG=True
 
 PROGRAM_NAME = 'opy'
 DEFAULT_ENCODING = 'utf-8'
@@ -42,18 +42,6 @@ if isPython2 :
 else:
     import builtins   
 
-def __fetchStandardExclusions():
-    filePath = os.path.join( os.path.dirname(__file__),
-                             'standard_exclusions.txt' )
-    with codecs.open( filePath, 'r', 'utf-8' ) as f:
-        lines = f.read().split( '\n' )
-    cleanLines = [ l.strip() for l in lines if len( l.strip() ) > 0 ]    
-    cleanList = list( set( cleanLines ) )
-    return cleanList
-standardExclusions = __fetchStandardExclusions()
-
-class OpyError( Exception ): pass
-       
 class OpyResults:
     def __init__(self):
         self.obfuscatedFiles = None
@@ -64,6 +52,8 @@ class OpyResults:
         self.clearTextPublic = None    
         self.clearTextIds    = None           
 
+class OpyError( Exception ): pass
+       
 class _RunOptions:
     def __init__( self ) :
         self.printHelp           = False
@@ -71,7 +61,9 @@ class _RunOptions:
         self.targetRootDirectory = None
         self.configFilePath      = None # None == default, False == use configSettings
         self.configSettings      = None
-   
+
+#-------------------------------------------------------
+
 def obfuscate( sourceRootDirectory = None
              , targetRootDirectory = None
              , configFilePath      = None
@@ -82,7 +74,7 @@ def obfuscate( sourceRootDirectory = None
     runOptions.printHelp           = False
     runOptions.sourceRootDirectory = sourceRootDirectory
     runOptions.targetRootDirectory = targetRootDirectory
-    runOptions.configSettings      = copy.copy( configSettings )    
+    runOptions.config      = copy.copy( configSettings )    
     runOptions.configFilePath = ( 
         configFilePath if configSettings is None else False )
     __autoConfig( runOptions, True )    
@@ -98,9 +90,9 @@ def analyze( sourceRootDirectory = None
     runOptions.sourceRootDirectory = sourceRootDirectory
     runOptions.targetRootDirectory = None
     runOptions.configFilePath      = False    
-    runOptions.configSettings = copy.copy( configSettings )    
+    runOptions.config = copy.copy( configSettings )    
     if fileList and len(fileList) > 0:
-        runOptions.configSettings.subset_files = fileList
+        runOptions.config.subset_files = fileList
     __autoConfig( runOptions, isVerbose )        
     return __analyze( runOptions, isVerbose )
 
@@ -108,15 +100,33 @@ def printHelp():
     runOptions = _RunOptions()
     runOptions.printHelp = True
     __main( runOptions )   
-        
-        
+
+#-------------------------------------------------------
+def __toCleanStrList( l ):
+    try:    
+        ret = list(set(l))
+        ret = [str(x).strip() for x in ret if x is not None]
+        ret = [x for x in ret if len(x) != 0]
+        return ret 
+    except: return []
+
+def __fetchStandardExclusions():
+    filePath = os.path.join( os.path.dirname(__file__),
+                             'standard_exclusions.txt' )
+    with codecs.open( filePath, 'r', 'utf-8' ) as f:
+        lines = f.read().split( '\n' )
+    cleanLines = [ l.strip() for l in lines if len( l.strip() ) > 0 ]    
+    return __toCleanStrList( cleanLines )
+
+standardExclusions = __fetchStandardExclusions()
+           
 def __autoConfig( runOptions, isVerbose ):    
         
-    isStandardExc = runOptions.configSettings.apply_standard_exclusions
-    isPreserving  = runOptions.configSettings.preserve_unresolved_imports
-    isThrowing    = runOptions.configSettings.error_on_unresolved_imports
-    plainFiles    = runOptions.configSettings.plain_files
-    plainNames    = runOptions.configSettings.plain_names
+    isStandardExc = runOptions.config.apply_standard_exclusions
+    isPreserving  = runOptions.config.preserve_unresolved_imports
+    isThrowing    = runOptions.config.error_on_unresolved_imports
+    plainFiles    = runOptions.config.plain_files
+    plainNames    = runOptions.config.plain_names
     
     # first analyze, then auto configure OR error out if a problem is detected
     analysis      = __analyze( runOptions, isVerbose=False )
@@ -131,10 +141,11 @@ def __autoConfig( runOptions, isVerbose ):
                      [opy_parser.rootFileName(f) for f in obFiles] )     
         if projPkgs   is None: projPkgs=[]
         if projMods   is None: projMods=[]
-        if plainNames is None: plainNames=[]                        
-        obMods   = [m for m in obMods if m not in projPkgs and 
-                                         m not in projMods and 
-                                         m not in plainNames ]
+        if plainNames is None: plainNames=[]
+        obMods   = [m for m in obMods 
+                    if opy_parser.rootImportName(m) not in projPkgs]                                
+        obMods   = [m for m in obMods if m not in projMods and 
+                                         m not in plainNames]
                 
     # apply standard exclusions
     if len( obMods ) > 0 and isStandardExc:                         
@@ -145,8 +156,8 @@ def __autoConfig( runOptions, isVerbose ):
         if len( stdEx ) > 0: 
             if isVerbose: 
                 print( "Standard exclusions found: %s" % (",".join(stdEx),) )   
-            try:    runOptions.configSettings.external_modules.extend( stdEx )
-            except: runOptions.configSettings.external_modules = stdEx
+            try:    runOptions.config.external_modules.extend( stdEx )
+            except: runOptions.config.external_modules = stdEx
             
     # handle unresolved imports
     if len( obMods ) > 0:                                
@@ -155,8 +166,8 @@ def __autoConfig( runOptions, isVerbose ):
                 for m in obMods: 
                     print( "WARNING unresolved import: %s" % (m,) )
                 print("")
-            try:    runOptions.configSettings.external_modules.extend( obMods )
-            except: runOptions.configSettings.external_modules = obMods
+            try:    runOptions.config.external_modules.extend( obMods )
+            except: runOptions.config.external_modules = obMods
         elif isThrowing:                    
             raise OpyError( "Unresolved import(s): %s" % (",".join(obMods),) ) 
         
@@ -164,10 +175,10 @@ def __autoConfig( runOptions, isVerbose ):
 
 def __analyze( runOptions, isVerbose ):
     # allow for the same runOptions to work for both analyze and obfuscate                  
-    savedDryRun = runOptions.configSettings.dry_run    
-    runOptions.configSettings.dry_run = True
+    savedDryRun = runOptions.config.dry_run    
+    runOptions.config.dry_run = True
     results = __main( runOptions, isVerbose )    
-    runOptions.configSettings.dry_run = savedDryRun
+    runOptions.config.dry_run = savedDryRun
     return results
 
 def __main( runOptions, isVerbose=True ):    
@@ -182,17 +193,18 @@ def __main( runOptions, isVerbose=True ):
         print ('Copyright (C) Geatec Engineering. License: Apache 2.0 at  http://www.apache.org/licenses/LICENSE-2.0\n')
     mainCount+=1
 
-    if DEBUG or runOptions and isVerbose:
-        if runOptions.configSettings.dry_run:
+    if runOptions and (DEBUG or isVerbose):
+        runOptions.config._clean()
+        if runOptions.config.dry_run:
             print( ">>> ANALYZING: " )
             print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
-            print( "configuration: \n%s"  % (runOptions.configSettings,) )                
+            print( "configuration: \n%s"  % (runOptions.config,) )                
         else :
             print( ">>> OBFUSCATING: " )
             print( "source directory: %s" % (runOptions.sourceRootDirectory,) )
             print( "target directory: %s" % (runOptions.targetRootDirectory,) )
             print( "config file path: %s" % (runOptions.configFilePath,) )
-            print( "configuration: \n%s"  % (runOptions.configSettings,) )    
+            print( "configuration: \n%s"  % (runOptions.config,) )    
 
     opy_parser._reset()
 
@@ -350,8 +362,8 @@ Licence:
     global skip_public, plain_files, plain_names, dry_run, prepped_only
     global subset_files
 
-    if configFilePath=="":
-        configFile = runOptions.configSettings.toVirtualFile()
+    if configFilePath=="":        
+        configFile = runOptions.config.toVirtualFile()
     else :        
         try:
             configFile = open (configFilePath)
@@ -675,7 +687,7 @@ import {0} as currentModule
 
             # Replace any imported modules per the old/new (key/value) pairs provided
             if len(replacementModulesDict) > 0 : 
-                normalContent = opy_parser.replaceImports( normalContent, replacementModulesDict )
+                normalContent = opy_parser.replaceModNames( normalContent, replacementModulesDict )
                                 
             # Parse content to find imports and optionally provide aliases for those in clear text,
             # so that they will become "masked" upon obfuscation.
@@ -774,6 +786,11 @@ import {0} as currentModule
                 opy_parser.maskedIdentifiers[ unMasked ] = obf                
                 break    
     for m in masks: obfuscatedWordDict.pop( m, None )
+    
+    opy_parser.obfuscatedModImports = __toCleanStrList( 
+        opy_parser.obfuscatedModImports )        
+    opy_parser.clearTextModImports = __toCleanStrList( 
+        opy_parser.clearTextModImports )
     
     if DEBUG or isVerbose: 
         print ('>>> Obfuscation Summary:')                
