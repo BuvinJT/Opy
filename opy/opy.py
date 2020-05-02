@@ -687,14 +687,14 @@ import {0} as currentModule
 
             # Replace any imported modules per the old/new (key/value) pairs provided
             if len(replacementModulesDict) > 0 : 
-                normalContent = opy_parser.replaceModNames( normalContent, replacementModulesDict )
+                normalContent = opy_parser.replaceModNames( normalContent, sourceFilePath, replacementModulesDict )
                                 
             # Parse content to find imports and optionally provide aliases for those in clear text,
             # so that they will become "masked" upon obfuscation.
             if maskExternalModules : 
-                normalContent = opy_parser.injectAliases( normalContent, externalModuleNameList )
+                normalContent = opy_parser.injectAliases( normalContent, sourceFilePath, externalModuleNameList )
             else:  
-                opy_parser.analyzeImports( normalContent, externalModuleNameList )
+                opy_parser.analyzeImports( normalContent, sourceFilePath, externalModuleNameList )
 
             if not preppedOnly :
                 # Obfuscate content without strings

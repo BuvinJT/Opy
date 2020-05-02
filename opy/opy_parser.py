@@ -2,7 +2,10 @@ import re
 import ast
 import six 
 import os
+import sys
 import collections
+
+DEBUG=True
 
 NEWLINE      = '\n'
 SPACE        = ' '    
@@ -21,6 +24,8 @@ SET_ALIAS_TEMPLATE = "%s as %s"
 CONTINUED_TEMPLATE = "%s%s%s"
 LONG_LINE_TEMPLATE = "%s%s"
 
+__AST_ERR_TMPT = "\nCannot parse file: %s\n"
+
 class __PositiveException( Exception ): pass
 
 # -----------------------------------------------------------------------------
@@ -38,36 +43,70 @@ def _reset():
 # -----------------------------------------------------------------------------
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
 
-def analyzeImports( fileContent, clearTextMods=[] ):
-    __parseImports( fileContent, __ANALIZE_MODE, clearTextMods )
+def analyzeImports( fileContent, fileName=None, clearTextMods=[] ):
+    __parseImports( fileContent, __ANALIZE_MODE, fileName, clearTextMods )
 
-def injectAliases( fileContent, clearTextMods=[] ):
-    return __parseImports( fileContent, __MASK_MODE, clearTextMods )
+def injectAliases( fileContent, fileName=None, clearTextMods=[] ):
+    return __parseImports( fileContent, __MASK_MODE, fileName, clearTextMods )
 
-def replaceModNames( fileContent, replacements={} ):
-    return __parseImports( fileContent, __REPLACE_MODE, replacements=replacements )
+def replaceModNames( fileContent, fileName=None, replacements={} ):
+    return __parseImports( fileContent, __REPLACE_MODE, fileName, 
+                           replacements=replacements )
 
-def __parseImports( fileContent, mode, 
+def __parseImports( fileContent, mode, fileName, 
                     clearTextNames=[], replacements={} ):    
 
     __parseImports.Import = collections.namedtuple(
             "Import", [ "module", "name", "alias", "lineno" ] ) 
 
-    def main( fileContent, mode, clearTextNames, replacements ):
+    def main( fileContent, mode, fileName, clearTextNames, replacements ):
+
+        if DEBUG:
+            print()
+            print(">>> PARSING: ", fileName)
     
-        importDetails = __catalogImports( fileContent, clearTextNames )
-        #print( importDetails )
+        # Eliminate line continuations right off the bat!
+        # This helps ease all subsequent operations to some degree,
+        # and is somewhat beneficial to obfuscation itself, in that it
+        # makes the code more difficult to read if it runs off the screen 
+        fileContent = NEWLINE.join( __toLines( 
+            fileContent, combineContinued=True ) )       
+    
+        # perform the fundamental parsing process
+        try: importDetails = __catalogImports( fileContent, clearTextNames )   
+        except Exception as e:
+            importDetails = None
+            sys.stderr.write( __AST_ERR_TMPT % (fileName,) )
+            sys.stderr.write( repr(e) )
+            sys.stderr.flush()
+            return None if mode == __ANALIZE_MODE else fileContent
+        
+        if DEBUG:
+            print()
+            print( fileContent )
+            print()
+            print( ">>> PARSING RESULTS" )
+            print( importDetails )
+            print()
+        
         if mode == __ANALIZE_MODE : return None
         
-        lines = __toLines( fileContent, combineContinued=True )       
+        lines = __toLines( fileContent )       
         if mode==__MASK_MODE :
             __assignAliasesToImports( lines, importDetails ) 
             __replaceIdentifiers( lines, importDetails )
         elif mode == __REPLACE_MODE: 
             __replaceModNames( lines, importDetails, replacements )
-        return NEWLINE.join( lines )
+
+        revisedContent = NEWLINE.join( lines )
+        if DEBUG:
+            print()
+            print(revisedContent)
+            print()                        
+        return revisedContent 
 
     def __catalogImports( fileContent, clearTextNames ):
+        if DEBUG: print("\n>>> Cataloging imports...\n")
         global obfuscatedModImports, clearTextModImports
         details = [ imp for imp in __yieldImport( fileContent ) ]                
         # update (simple) global mod name sets 
@@ -93,13 +132,14 @@ def __parseImports( fileContent, mode,
                     module, n.name.split( MEMBER_DELIM ), n.asname, 
                     node.lineno )
                 # Execution resumes here (with the locals preserved!) 
-                # on the next call to this function per the magic of "yeild"...
+                # on the next call to this function per the magic of "yield"...
                 
     def __assignAliasesToImports( lines, importDetails, modFilter=set() ):
-        """ modifies lines by referrence
+        """ modifies lines by reference
             conditionally modifies global maskedIdentifiers, 
             pass a modFilter to use this in "local mode"   
         """
+        if DEBUG: print("\n>>> Assigning aliases to imports...\n")
         global maskedIdentifiers
         newAliases={}        
         useGlobal = len(modFilter)==0
@@ -117,17 +157,25 @@ def __parseImports( fileContent, mode,
                 except: alias = ALIAS_TEMPLATE % (len(maskedIdentifiers),)
                 setAlias = SET_ALIAS_TEMPLATE % ( imp, alias )
                 regEx    = re.compile( IDENTIFIER_REGEX.format( imp ) )                                        
-                lines[ idx ] = regEx.sub( setAlias, line )  
+                revLine = regEx.sub( setAlias, line )
+                if DEBUG:
+                    print( "line %d: %s aliased as %s" % 
+                           (d.lineno, imp, alias) )
+                    print( "original line: ", line )
+                    print( "revised line:  ", revLine)
+                    print()
+                lines[ idx ] = revLine
                 newAliases[ imp ] = alias
                 if useGlobal: maskedIdentifiers[ imp ] = alias
         return newAliases
                    
     def __replaceIdentifiers( lines, importDetails, replacements={}, 
                               includeImportLines=False ): 
-        """ modifies lines by referrence
+        """ modifies lines by reference
             uses global maskedIdentifiers by default,
             else the "override" aliases parameter                 
         """
+        if DEBUG: print("\n>>> Replacing identifiers...\n") 
         if len(replacements)==0: replacements=maskedIdentifiers
         nakedRegExs={}
         trailingDotRegExs={}        
@@ -142,12 +190,20 @@ def __parseImports( fileContent, mode,
             lineno = idx+1            
             if lineno not in ignoreLineNos:
                 for oldName, newName in six.iteritems( replacements ):
+                    if DEBUG: original=line
                     line = nakedRegExs[oldName].sub( newName, line )
                     line = trailingDotRegExs[oldName].sub( newName + MEMBER_DELIM, line )
+                    if DEBUG and original!=line:
+                        print( "line %d: replaced %s with %s" %
+                                (lineno, oldName, newName) )
+                        print( "original line: ", original )
+                        print( "revised line:  ", line )
+                        print()
                     lines[idx] = line
 
     def __replaceModNames( lines, importDetails, replacements ):
-        """ modifies lines by referrence """
+        """ modifies lines by reference """
+        if DEBUG: print("\n>>> Replacing module names...\n")
         validated={}
         for oldName, newName in six.iteritems( replacements ):         
             for d in importDetails :          
@@ -164,6 +220,7 @@ def __parseImports( fileContent, mode,
     def __toLines( fileContent, combineContinued=False ):
         lines = fileContent.split( NEWLINE )
         if combineContinued :
+            # this does not attempt to compress white space purposefully!
             revLines = []
             longLine = ""
             for l in lines:
@@ -177,7 +234,7 @@ def __parseImports( fileContent, mode,
             lines = revLines
         return lines 
 
-    return main( fileContent, mode, clearTextNames, replacements )
+    return main( fileContent, mode, fileName, clearTextNames, replacements )
 
 # ----------------------------------------------------------------------------- 
 def findPublicIdentifiers( fileContent ):
