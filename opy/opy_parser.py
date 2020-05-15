@@ -1,9 +1,10 @@
 import re
 import ast
 import six 
-import os
+import os.path
 import sys
 import collections
+import inspect    # @UnusedImport
 
 DEBUG=True
 
@@ -25,41 +26,64 @@ CONTINUED_TEMPLATE = "%s%s%s"
 LONG_LINE_TEMPLATE = "%s%s"
 
 __AST_ERR_TMPT = "\nCannot parse file: %s\n"
+                
+__IMPORT_TMPLT       = "import %s"
+__FROM_IMPORT_TMPLT  = "from %s import %s"
+__IS_MOD_TMPLT       = "inspect.ismodule( %s )"
+__GET_MOD_PATH_TMPLT = "inspect.getfile( %s )"
+
+__DEFAULT_OBF_EXTS = ['py','pyx']
 
 class __PositiveException( Exception ): pass
 
+def __stdErr( msg ):
+    sys.stderr.write( msg )
+    sys.stderr.flush()
+
 # -----------------------------------------------------------------------------
-obfuscatedModImports = set()
-clearTextModImports  = set()
-maskedIdentifiers    = {}
+obfuscatedImports   = set()
+clearTextModImports    = set()
+clearTextMemberImports = set()
+maskedIdentifiers      = {}
 
 def _reset():
-    global obfuscatedModImports, clearTextModImports, maskedIdentifiers    
-    global _modAliases, _mbrAliases, _modReplace
-    obfuscatedModImports = set()
-    clearTextModImports  = set()
-    maskedIdentifiers    = {}
+    global obfuscatedImports, clearTextModImports, clearTextMemberImports, \
+        maskedIdentifiers    
+    obfuscatedImports   = set()
+    clearTextModImports    = set()
+    clearTextMemberImports = set()
+    maskedIdentifiers      = {}
 
 # -----------------------------------------------------------------------------
 __ANALIZE_MODE, __MASK_MODE, __REPLACE_MODE = tuple(range(3))
 
-def analyzeImports( fileContent, fileName=None, clearTextMods=[] ):
-    __parseImports( fileContent, __ANALIZE_MODE, fileName, clearTextMods )
+def analyzeImports( fileContent, fileName=None, clearTextMods=[], 
+                    obfuscateExts=__DEFAULT_OBF_EXTS ):
+    __parseImports( fileContent, __ANALIZE_MODE, fileName, clearTextMods,
+                    obfuscateExts=obfuscateExts )
 
-def injectAliases( fileContent, fileName=None, clearTextMods=[] ):
-    return __parseImports( fileContent, __MASK_MODE, fileName, clearTextMods )
+def injectAliases( fileContent, fileName=None, clearTextMods=[],
+                   obfuscateExts=__DEFAULT_OBF_EXTS ):
+    return __parseImports( fileContent, __MASK_MODE, fileName, clearTextMods,
+                           obfuscateExts=obfuscateExts )
 
-def replaceModNames( fileContent, fileName=None, replacements={} ):
+def replaceModNames( fileContent, fileName=None, replacements={},
+                     obfuscateExts=__DEFAULT_OBF_EXTS ):
     return __parseImports( fileContent, __REPLACE_MODE, fileName, 
-                           replacements=replacements )
+                           replacements=replacements,
+                           obfuscateExts=obfuscateExts )
 
 def __parseImports( fileContent, mode, fileName, 
-                    clearTextNames=[], replacements={} ):    
+                    clearTextNames=[], replacements={},
+                    obfuscateExts=__DEFAULT_OBF_EXTS ):    
 
     __parseImports.Import = collections.namedtuple(
-            "Import", [ "module", "name", "alias", "lineno" ] ) 
+            "Import", [ "module", "name", "alias", "lineno",
+                        "real_mod", "real_mbr", "real_path" ] ) 
 
-    def main( fileContent, mode, fileName, clearTextNames, replacements ):
+    def main( fileContent, mode, fileName, 
+              clearTextNames, replacements,
+              obfuscateExts ):
 
         if DEBUG:
             print()
@@ -73,12 +97,11 @@ def __parseImports( fileContent, mode, fileName,
             fileContent, combineContinued=True ) )       
     
         # perform the fundamental parsing process
-        try: importDetails = __catalogImports( fileContent, clearTextNames )   
+        try: importDetails = __catalogImports( fileContent, clearTextNames,
+                                               obfuscateExts )   
         except Exception as e:
-            importDetails = None
-            sys.stderr.write( __AST_ERR_TMPT % (fileName,) )
-            sys.stderr.write( repr(e) )
-            sys.stderr.flush()
+            __stdErr( __AST_ERR_TMPT % (fileName,) )
+            __stdErr( repr(e) )
             return None if mode == __ANALIZE_MODE else fileContent
         
         if DEBUG:
@@ -88,9 +111,11 @@ def __parseImports( fileContent, mode, fileName,
             print( ">>> PARSING RESULTS" )
             print( importDetails )
             print()
-        
+
+        # don't manipulate the source        
         if mode == __ANALIZE_MODE : return None
         
+        # start manipulating the source
         lines = __toLines( fileContent )       
         if mode==__MASK_MODE :
             __assignAliasesToImports( lines, importDetails ) 
@@ -98,28 +123,62 @@ def __parseImports( fileContent, mode, fileName,
         elif mode == __REPLACE_MODE: 
             __replaceModNames( lines, importDetails, replacements )
 
+        # return the revised source  
         revisedContent = NEWLINE.join( lines )
         if DEBUG:
             print()
             print(revisedContent)
-            print()                        
+            print()                                    
         return revisedContent 
 
-    def __catalogImports( fileContent, clearTextNames ):
+    def __catalogImports( fileContent, clearTextNames,
+                          obfuscateExts ):
         if DEBUG: print("\n>>> Cataloging imports...\n")
-        global obfuscatedModImports, clearTextModImports
+        global obfuscatedImports, clearTextModImports, clearTextMemberImports 
+        # get the entire parsed results in single shot
         details = [ imp for imp in __yieldImport( fileContent ) ]                
-        # update (simple) global mod name sets 
-        mods = [ __detailToMod( d ) for d in details ]
-        for m in mods: 
-            if m in clearTextNames: clearTextModImports.add(  m )
-            else :                  obfuscatedModImports.add( m )        
+        # catalog the results
+        for d in details:           
+            print( "d.real_path: ", type(d.real_path) )       
+            srcExt = fileExtension( d.real_path )            
+            if srcExt is None or srcExt in obfuscateExts:
+                m = __detailToImportMod( d )                
+                if m in clearTextNames: clearTextModImports.add(  m )
+                else                  : obfuscatedImports.add( m )                        
+            else:
+                if DEBUG : 
+                    print( 'import "%s" has as source file extension: "%s"' %
+                           (d.real_mod, srcExt) )
+                    if d.real_mod: 
+                        print( "adding %s to clear text mods" % (d.real_mod,) )                    
+                    if d.real_mbr: 
+                        print( "adding %s to clear text members" % (d.real_mbr,) )                
+                if d.real_mod: clearTextModImports.add(    d.real_mod )
+                if d.real_mbr: clearTextMemberImports.add( d.real_mbr )
         return details
         
     # "GENERATOR" function, to be called in a loop
     # Returns a detailed accounting of parsed results
     # See: https://stackoverflow.com/a/9049549/3220983
     def __yieldImport( fileContent ):
+        def isMod( modName ):
+            try: 
+                exec( __IMPORT_TMPLT % (modName,) ) 
+                return eval( __IS_MOD_TMPLT % (modName,) )
+            except: return False    
+
+        def modPath( modName ):
+            try: 
+                exec( __IMPORT_TMPLT % (modName,) ) 
+                return eval( __GET_MOD_PATH_TMPLT % (modName,) )
+            except: return None     
+                            
+        def isChild( moduleName, childName ):
+            try:
+                exec( __FROM_IMPORT_TMPLT % (moduleName, childName) )
+                return True
+            except: return False
+            
         root = ast.parse( fileContent )           
         for node in ast.walk( root ):
             #print(node)
@@ -128,11 +187,28 @@ def __parseImports( fileContent, mode, fileName,
                 module = node.module.split( SUB_MOD_DELIM )
             else: continue        
             for n in node.names:                
+                name = n.name.split( MEMBER_DELIM )
+                real_path = None                
+                real_mod = None
+                real_mbr = None
+                impParts = module + name
+                for i in range(len( impParts )):
+                    # start with the whole thing, then chop off more from 
+                    # the end each time                                  
+                    head = ( MEMBER_DELIM.join( impParts ) if i==0 else
+                             MEMBER_DELIM.join( impParts[:-i] ) )
+                    # start with nothing, then collect more from the end each time
+                    tail = "" if i==0 else MEMBER_DELIM.join( impParts[-i:] )
+                    if isMod( head ):
+                        real_mod = head             
+                        real_path = modPath( real_mod )
+                        if isChild( real_mod, tail ): real_mbr = tail                        
+                        break
                 yield __parseImports.Import( 
-                    module, n.name.split( MEMBER_DELIM ), n.asname, 
-                    node.lineno )
+                    module, name, n.asname, node.lineno,
+                    real_mod, real_mbr, real_path )
                 # Execution resumes here (with the locals preserved!) 
-                # on the next call to this function per the magic of "yield"...
+                # on the next call to this function per the magic of "yield"...               
                 
     def __assignAliasesToImports( lines, importDetails, modFilter=set() ):
         """ modifies lines by reference
@@ -146,7 +222,7 @@ def __parseImports( fileContent, mode, fileName,
         if useGlobal: modFilter = clearTextModImports
         for d in importDetails :          
             if d.alias : continue  
-            mod = __detailToMod( d )
+            mod = __detailToImportMod( d )
             if mod in modFilter : 
                 imp      = MEMBER_DELIM.join( d.name ) 
                 idx      = d.lineno-1        
@@ -207,16 +283,19 @@ def __parseImports( fileContent, mode, fileName,
         validated={}
         for oldName, newName in six.iteritems( replacements ):         
             for d in importDetails :          
-                mod = __detailToMod( d )
+                mod = __detailToImportMod( d )
                 if mod == oldName :
                     validated[oldName]=newName               
                     break      
         __replaceIdentifiers( lines, importDetails, 
             replacements=validated, includeImportLines=True )             
 
-    def __detailToMod( d ):
+    def __detailToImportMod( d ):
         return MEMBER_DELIM.join( d.module if len(d.module) > 0 else d.name ) 
-         
+
+    def __detailToImportName( d ):
+        return d.module if len(d.module) > 0 else d.name 
+     
     def __toLines( fileContent, combineContinued=False ):
         lines = fileContent.split( NEWLINE )
         if combineContinued :
@@ -234,7 +313,8 @@ def __parseImports( fileContent, mode, fileName,
             lines = revLines
         return lines 
 
-    return main( fileContent, mode, fileName, clearTextNames, replacements )
+    return main( fileContent, mode, fileName, 
+                 clearTextNames, replacements, obfuscateExts )
 
 # ----------------------------------------------------------------------------- 
 def findPublicIdentifiers( fileContent ):
@@ -290,6 +370,10 @@ def baseFileName( path ): return os.path.basename( path )
 
 def rootFileName( path ): return os.path.splitext( baseFileName( path ) )[0]
 
+def fileExtension( p ):     
+    try: return os.path.splitext( p )[1][1:] # no leading .
+    except: return None
+  
 def rootImportName( modName ): return modName.split( SUB_MOD_DELIM )[0]
    
 def toPackageName( relPath ): 
@@ -319,28 +403,11 @@ def public(): return x
 def _protected(): return _y
 def __private(): return __z
 """)
-
-    fileContent=(
-"""    
-from sys import stdout
-# cross environment Tkinter import    
-try:    from tkinter import Tk 
-except: from Tkinter import Tk
-try:    from tkinter.ttk import Button 
-except: from ttk import Button
-
-def onClick(): 
-    stdout.write( "Hello!\\n" )
-    stdout.flush()
-
-mainWindow = Tk()
-Button( mainWindow, text="Hello TKinkter", command=onClick ).grid()
-mainWindow.mainloop()
-""")    
     
-    analyzeImports( fileContent, clearTextMods=[] )
-    print( "obfuscated", obfuscatedModImports )
-    print( "clearText", clearTextModImports )
+    analyzeImports( fileContent, clearTextMods=['ast','os'] )
+    print( "obfuscated", obfuscatedImports )
+    print( "clearTextMod", clearTextModImports )
+    print( "clearTextMbr", clearTextMemberImports )
     print( "masked", maskedIdentifiers )
     
     print( injectAliases( fileContent, clearTextMods=["ast","os","os.path"]  ) )
