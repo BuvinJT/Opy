@@ -875,7 +875,7 @@ import {0} as currentModule
         print ('Masked identifiers: {0}'.format (len(opy_parser.maskedIdentifiers)))
         print ('Obfuscated import references: {0}'.format (len(opy_parser.obfuscatedImports)))                    
         print ('Clear text module references: {0}'.format (len(opy_parser.clearTextModImports)))
-        print ('Clear text member references: {0}'.format (len(opy_parser.clearTextMemberImports)))        
+        print ('Clear text child import references: {0}'.format (len(opy_parser.clearTextMemberImports)))        
         print ('Clear text public identifiers: {0}'.format (len(skippedPublicSet)))
         print ('')
         print ('>>> Obfuscation Details:')            
@@ -884,7 +884,7 @@ import {0} as currentModule
         print ('Masked identifiers: {0}'.format (opy_parser.maskedIdentifiers))
         print ('Obfuscated import references: {0}'.format (opy_parser.obfuscatedImports))                    
         print ('Clear text module references: {0}'.format (opy_parser.clearTextModImports))
-        print ('Clear text member references: {0}'.format (opy_parser.clearTextMemberImports))
+        print ('Clear text child import references: {0}'.format (opy_parser.clearTextMemberImports))
         print ('Clear text public identifiers: {0}'.format (skippedPublicSet))
         print ('')    
     

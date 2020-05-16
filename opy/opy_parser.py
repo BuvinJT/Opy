@@ -5,6 +5,7 @@ import os.path
 import sys
 import collections
 import inspect    # @UnusedImport
+from _ast import Or
 
 DEBUG=True
 
@@ -139,22 +140,19 @@ def __parseImports( fileContent, mode, fileName,
         details = [ imp for imp in __yieldImport( fileContent ) ]                
         # catalog the results
         for d in details:           
-            print( "d.real_path: ", type(d.real_path) )       
-            srcExt = fileExtension( d.real_path )            
-            if srcExt is None or srcExt in obfuscateExts:
-                m = __detailToImportMod( d )                
-                if m in clearTextNames: clearTextModImports.add(  m )
-                else                  : obfuscatedImports.add( m )                        
-            else:
-                if DEBUG : 
-                    print( 'import "%s" has as source file extension: "%s"' %
-                           (d.real_mod, srcExt) )
-                    if d.real_mod: 
-                        print( "adding %s to clear text mods" % (d.real_mod,) )                    
-                    if d.real_mbr: 
-                        print( "adding %s to clear text members" % (d.real_mbr,) )                
-                if d.real_mod: clearTextModImports.add(    d.real_mod )
-                if d.real_mbr: clearTextMemberImports.add( d.real_mbr )
+            mod    = __detailToImportMod(  d )
+            name   = __detailToImportName( d )
+            srcExt = fileExtension( d.real_path )
+            if( d.real_mod in clearTextNames or
+                (srcExt is not None and 
+                 srcExt not in obfuscateExts) ):
+                clearTextModImports.add( d.real_mod )
+                if len(name) > 0 and name != d.real_mod: 
+                    clearTextMemberImports.add( name )                        
+            else :                     
+                if mod: obfuscatedImports.add( mod )
+                if name: obfuscatedImports.add( name )                        
+                
         return details
         
     # "GENERATOR" function, to be called in a loop
@@ -291,10 +289,10 @@ def __parseImports( fileContent, mode, fileName,
             replacements=validated, includeImportLines=True )             
 
     def __detailToImportMod( d ):
-        return MEMBER_DELIM.join( d.module if len(d.module) > 0 else d.name ) 
+        return MEMBER_DELIM.join( d.module ) if len(d.module) > 0 else "" 
 
     def __detailToImportName( d ):
-        return d.module if len(d.module) > 0 else d.name 
+        return MEMBER_DELIM.join( d.name ) if len(d.name) > 0 else "" 
      
     def __toLines( fileContent, combineContinued=False ):
         lines = fileContent.split( NEWLINE )
