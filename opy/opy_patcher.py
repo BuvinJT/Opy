@@ -43,7 +43,7 @@ class OpyFile:
         if _PLACEHOLDER_PREFIX in inText: 
             for clr, obf in six.iteritems( self.__results.obfuscatedIds ):
                 outText = outText.replace( obfuscatedId( clr ), obf )
-            for clr, obf in six.iteritems( self.__results.maskedIds ):
+            for clr, obf in six.iteritems( self.__results.maskedImports ):
                 outText = outText.replace( obfuscatedId( clr ), obf )                
         return outText
         
