@@ -203,7 +203,7 @@ class Parser():
                     # Execution resumes here (with the locals preserved!) 
                     # on the next call to this function per the magic of "yield"...               
                     
-        def __assignAliasesToImports( lines, importDetails, modFilter=set() ):
+        def __assignAliasesToImports( lines, modFilter=set() ):
             """ modifies lines by reference
                 conditionally modifies self.maskedImports, 
                 pass a modFilter to use this in "local mode"   
@@ -212,7 +212,7 @@ class Parser():
             newAliases={}        
             useDefault = len(modFilter)==0
             if useDefault: modFilter = self.clearTextMods
-            for d in importDetails :          
+            for d in self.__importDetails:          
                 if d.alias : continue  
                 if d.real_mod in modFilter : 
                     imp      = MEMBER_DELIM.join( d.name ) 
@@ -393,7 +393,13 @@ def toProjectSubPackage( relPath ):
 # Basic Unit Tests 
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
-    from . opy import Obfuscator 
+    class Obfuscator: 
+        def __init__( self ):                
+            self.clearTextMods=[]
+            self.clearTextIds=[] 
+            self.obfuscateExts=[] 
+            self.replacements={}
+                     
     fileContent=(
 """
 import ast 
@@ -420,7 +426,7 @@ def __private(): return __z
     print( "clearTextMod", p.toClearTextMods )
     print( "clearTextIds", p.toClearTextIds )
     
-    print( p.injectAliases( fileContent, clearTextMods=["ast","os","os.path"]  ) )
+    print( p.injectAliases( fileContent ) )
     print( "masked", p.maskedImports )
         
     o.replacements = {
