@@ -6,7 +6,7 @@ import sys
 import collections
 import inspect    # @UnusedImport (used by exec/eval)
 
-DEBUG=False
+DEBUG=True
 
 NEWLINE      = '\n'
 SPACE        = ' '    
@@ -98,7 +98,7 @@ class Parser():
                 print()
                 print( fileContent )
                 print()
-                print( ">>> PARSING RESULTS" )
+                print( ">>> IMPORT PARSING RESULTS" )
                 print( self.__importDetails )
                 print()
     
@@ -123,6 +123,7 @@ class Parser():
     
         def __catalogImports( fileContent ):
             if DEBUG: print("\n>>> Cataloging imports...\n")
+            
             # get the entire parsed results in single shot
             self.__importDetails=[imp for imp in __yieldImport( fileContent )]                
             # catalog the results
@@ -131,6 +132,8 @@ class Parser():
                 mod    = __detailToImportMod(  d )
                 name   = __detailToImportName( d )
                 if mod:                 
+                    #print( mod, self.obfuscator.clearTextMods, 
+                    #       __isImportIn( mod, self.obfuscator.clearTextMods ) )                    
                     if( __isImportIn( mod, self.obfuscator.clearTextMods ) or 
                         mod in self.obfuscator.clearTextIds ): 
                         self.clearTextImports.add( mod )                        
@@ -295,6 +298,7 @@ class Parser():
             return MEMBER_DELIM.join( d.module + d.name )
                  
         def __isImportIn( imp, search ):
+            if isinstance( imp, six.string_types ): imp=imp.split(MEMBER_DELIM)
             for i in range(len(imp)):
                 # start with the whole thing, then chop off more from 
                 # the end each time                                              
@@ -420,11 +424,13 @@ def __private(): return __z
     o.clearTextMods=['ast','os'] 
     p = Parser(o) 
     p.analyzeImports( fileContent )
-    print( "obfuscated", p.obfuscatedImports )
-    print( "masked", p.maskedImports )
-    print( "obfuscatedMod", p.obfuscatedMods )    
-    print( "clearTextMod", p.toClearTextMods )
-    print( "clearTextIds", p.toClearTextIds )
+    print( "obfuscated Imports", p.obfuscatedImports )
+    print( "clear text Imports", p.clearTextImports )
+    #print( "masked imports", p.maskedImports )
+    print( "obfuscated mods", p.obfuscatedMods )
+    print( "clear text Mods", p.clearTextMods )    
+    print( "TO clear Text Mod", p.toClearTextMods )
+    print( "TO clear Text Ids", p.toClearTextIds )
     
     print( p.injectAliases( fileContent ) )
     print( "masked", p.maskedImports )
