@@ -5,6 +5,7 @@ import os.path
 import sys
 import collections
 import inspect    # @UnusedImport (used by exec/eval)
+import traceback
 
 DEBUG=True
 
@@ -89,9 +90,9 @@ class Parser():
         
             # perform the fundamental parsing process
             try: __catalogImports( fileContent )   
-            except Exception as e:
+            except Exception:
                 _stdErr( Parser.__AST_ERR_TMPT % (fileName,) )
-                _stdErr( repr(e) )
+                traceback.print_exc()
                 return None if mode == Parser.__ANALIZE_MODE else fileContent
             
             if DEBUG:
@@ -298,13 +299,15 @@ class Parser():
             return MEMBER_DELIM.join( d.module + d.name )
                  
         def __isImportIn( imp, search ):
-            if isinstance( imp, six.string_types ): imp=imp.split(MEMBER_DELIM)
-            for i in range(len(imp)):
-                # start with the whole thing, then chop off more from 
-                # the end each time                                              
-                head = ( MEMBER_DELIM.join( imp ) if i==0 else
-                         MEMBER_DELIM.join( imp[:-i] ) )        
-                if head in search: return True
+            try: 
+                if isinstance( imp, six.string_types ): imp=imp.split(MEMBER_DELIM)
+                for i in range(len(imp)):
+                    # start with the whole thing, then chop off more from 
+                    # the end each time                                              
+                    head = ( MEMBER_DELIM.join( imp ) if i==0 else
+                             MEMBER_DELIM.join( imp[:-i] ) )        
+                    if head in search: return True
+            except: pass        
             return False
             
         def __toLines( fileContent, combineContinued=False ):
@@ -384,7 +387,9 @@ def fileExtension( p ):
     try: return os.path.splitext( p )[1][1:] # no leading .
     except: return None
   
-def rootImportName( modName ): return modName.split( SUB_MOD_DELIM )[0]
+def rootImportName( modName ): 
+    try: return modName.split( SUB_MOD_DELIM )[0]
+    except: return None
    
 def toPackageName( relPath ): 
     return relPath.replace( "/", SUB_MOD_DELIM ).replace( "\\" , SUB_MOD_DELIM)
