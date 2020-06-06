@@ -7,7 +7,7 @@ import collections
 import inspect    # @UnusedImport (used by exec/eval)
 import traceback
 
-DEBUG=True
+DEBUG=False
 
 NEWLINE      = '\n'
 SPACE        = ' '    

@@ -149,9 +149,18 @@ class Obfuscator():
                 except: runOptions.config.external_modules = obMods
             elif isThrowing:                    
                 raise OpyError("Unresolved import(s): %s" % (",".join(obMods),)) 
+
+        # extend the "plain names" list with the imports that can't be obfuscated  
+        clearMods = analysis.toClearTextMods   
+        if len(clearMods) > 0: 
+                if isVerbose: 
+                    print("Imported module found which must remain in clear text: %s" 
+                          % (",".join(clearMods),))   
+                try:    runOptions.config.external_modules.extend(clearMods)
+                except: runOptions.config.external_modules = clearMods
     
         # extend the "plain names" list with the imports that can't be obfuscated  
-        clearIds = analysis.clearTextIds   
+        clearIds = analysis.toClearTextIds   
         if len(clearIds) > 0: 
                 if isVerbose: 
                     print("Imports ids found which must remain in clear text: %s" 
