@@ -2,6 +2,11 @@ from six import PY2
 if PY2 : import __builtin__  # @UnresolvedImport
 else   : import builtins   
 
+# File objects are built-in, but aren't found as in the builtins import
+# so the file method names e.g. write(), flush(), etc. aren't known that way
+# Explicitly including the standard io module will collect those missing names.    
+_OTHER_BUILTIN_MODS = [ 'io' ]   
+
 class Inspector: 
     
     def __init__( self, mods, plainMarker, isVerbose=False ):
@@ -10,7 +15,9 @@ class Inspector:
         self.publicIds   = set()
         
         self.__modObjs = set()
-        self._extractIds( __builtin__ if PY2 else builtins ) 
+        self._extractIds( __builtin__ if PY2 else builtins )
+        try:    mods.extend( _OTHER_BUILTIN_MODS )
+        except: mods = _OTHER_BUILTIN_MODS     
         self._extractIds( _ModAttribCollector( mods, plainMarker, isVerbose ) )
                  
     def _extractIds( self, obj ):
@@ -61,3 +68,7 @@ import {0} as modObj
                 if isVerbose: 
                     print( "Warning: could not inspect module %s" % (mod,) )
 
+# Basic Unit Tests 
+# -----------------------------------------------------------------------------
+if __name__ == '__main__':   
+    print( Inspector( ['os','sys','re','io'], '__opy__', True ).publicIds )
