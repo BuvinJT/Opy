@@ -19,6 +19,8 @@ IDENTIFIER_DOT_REGEX = r'\b{0}\.\b'
 
 MEMBER_DELIM = SUB_MOD_DELIM = '.'
 MAGIC_PREFFIX = MAGIC_SUFFIX = PRIVATE_PREFIX = '__'
+
+IMPORT_KW = " import "
         
 ALIAS_TEMPLATE     = "alias_%d"  
 SET_ALIAS_TEMPLATE = "%s as %s"
@@ -229,8 +231,17 @@ class Parser():
                         else: raise _PositiveException()
                     except: alias = ALIAS_TEMPLATE % (len(self.maskedImports),)
                     setAlias = SET_ALIAS_TEMPLATE % ( imp, alias )
-                    regEx    = re.compile( IDENTIFIER_REGEX.format( imp ) )                                        
-                    revLine = regEx.sub( setAlias, line )
+                    regEx    = re.compile( IDENTIFIER_REGEX.format( imp ) )
+                    isFromLine = (len(d.module) > 0)
+                    if isFromLine:
+                        # split up the line so you don't attempt to alias the 
+                        # first part too on a regex match (which can happen when the 
+                        # mod name is the same as the member name)
+                        lineParts = line.split( IMPORT_KW )
+                        revLine = "%s%s%s" % ( lineParts[0], IMPORT_KW, 
+                            regEx.sub( setAlias, ''.join(lineParts[1:]) ) ) 
+                    else:
+                        revLine = regEx.sub( setAlias, line )
                     if DEBUG:
                         print( "line %d: %s aliased as %s" % 
                                (d.lineno, imp, alias) )
