@@ -1,7 +1,6 @@
 import six
 import codecs
-try:    from . opy import DEFAULT_ENCODING  # @UnusedImport
-except: from opy import DEFAULT_ENCODING    # @Reimport @UnresolvedImport
+from . obfuscator import DEFAULT_ENCODING 
 
 _PLACEHOLDER_PREFIX = "OBF__"
 _PLACEHOLDER_SUFFIX = "__OBF"
