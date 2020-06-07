@@ -32,9 +32,10 @@ DEBUG_LEVEL = 1
 PROGRAM_NAME = 'opy'
 DEFAULT_ENCODING = 'utf-8'
 from . _version import __version__  
-from . opy_config import OpyConfig 
-from . import opy_parser
-from . opy_parser import Parser
+from . config import OpyConfig 
+from opy import parser
+from . parser import Parser
+from . inspector import Inspector
 
 mainCount = 0
 isPython2 = six.PY2
@@ -417,14 +418,15 @@ Licence:
             except: continue        
             
         # ============ Gather source file names
-        rawSourceFilePathList=[]
-        topLevelSubDirectories=[]
+        self.rawSourceFilePathList=[]
+        self.topLevelSubDirectories=[]
         for directory, subDirectories, fileNames in os.walk( sourceRootDirectory ):
-            rawSourceFilePathList += [ 
+            self.rawSourceFilePathList += [ 
                 os.path.join( directory, fileName ) for fileName in fileNames ]
             try:
                 if len(os.path.split(subDirectories[0])[0])==0: 
-                    for sub in subDirectories: topLevelSubDirectories.append( sub )
+                    for sub in subDirectories: 
+                        self.topLevelSubDirectories.append( sub )
             except: pass
         
         def hasSkipPathFragment (sourceFilePath):
@@ -433,8 +435,8 @@ Licence:
                     return True
             return False
         
-        sourceFilePathList = [
-            sourceFilePath for sourceFilePath in rawSourceFilePathList 
+        self.sourceFilePathList = [
+            sourceFilePath for sourceFilePath in self.rawSourceFilePathList 
             if not hasSkipPathFragment (sourceFilePath) ]
     
         if len(self.subsetFilesList) > 0 :        
@@ -443,8 +445,8 @@ Licence:
                 baseName = os.path.basename(sourceFilePath)
                 if baseName in self.subsetFilesList : return True
                 return False
-            sourceFilePathList = [
-                sourceFilePath for sourceFilePath in sourceFilePathList 
+            self.sourceFilePathList = [
+                sourceFilePath for sourceFilePath in self.sourceFilePathList 
                 if inSubsetFilesList(sourceFilePath)]
     
         # =========== Define comment swapping tools
@@ -545,13 +547,13 @@ Licence:
         self.skipWordSet = set (keyword.kwlist + ['__init__'] + self.extraPlainWordList)  # __init__ should be in, since __init__.py is special
         if not isPython2: self.skipWordSet.update(['unicode', 'unichr' ])  # not naturally kept in clear text when obfuscation is produced in Python 3
     
-        rawPlainFilePathList = ['{0}/{1}'.format (sourceRootDirectory, plainFileRelPath.replace ('\\', '/')) for plainFileRelPath in self.plainFileRelPathList]
+        self.rawPlainFilePathList = ['{0}/{1}'.format (sourceRootDirectory, plainFileRelPath.replace ('\\', '/')) for plainFileRelPath in self.plainFileRelPathList]
         
         # Prevent e.g. attempt to open opy_config.txt if it is in a different location but still listed under plain_files
         
-        plainFilePathList = [plainFilePath for plainFilePath in rawPlainFilePathList if os.path.exists (plainFilePath)]
+        self.plainFilePathList = [plainFilePath for plainFilePath in self.rawPlainFilePathList if os.path.exists (plainFilePath)]
         
-        for plainFilePath in plainFilePathList:
+        for plainFilePath in self.plainFilePathList:
             plainFile = open (plainFilePath)
             content = plainFile.read ()
             plainFile.close ()        
@@ -562,70 +564,13 @@ Licence:
             # Put identifiers in skip word set        
             self.skipWordSet.update (re.findall (identifierRegEx, content))
             
-        class ExternalModules:
-    
-            def __init__ (self, externalModuleNameList, plainMarker):
-                for externalModuleName in externalModuleNameList:
-                    attributeName = externalModuleName.replace ('.', plainMarker)  # Replace . in module name by placeholder to get attribute name
-                    
-                    try:
-                        exec (
-                            '''
-import {0} as currentModule
-                            '''.format (externalModuleName),
-                            globals ()
-                        )
-                        setattr (self, attributeName, currentModule)  # @UndefinedVariable
-                    except Exception as exception:
-                        if isVerbose: print (exception)
-                        setattr (self, attributeName, None)  # So at least the attribute name will be available
-                        if isVerbose: 
-                            print ('Warning: could not inspect external module {0}'.format (externalModuleName))
-                    
-        externalModules = ExternalModules( self.externalModuleNameList, self.plainMarker )
-        externalObjects = set ()
-                    
-        def addExternalNames (anObject):
-            if anObject in externalObjects:
-                return
-            else:
-                externalObjects.update ([anObject])
-    
-            try:
-                attributeNameList = list (anObject.__dict__)
-            except:
-                attributeNameList = []
             
-            try:
-                if isPython2:
-                    parameterNameList = list (anObject.func_code.co_varnames)
-                else:
-                    parameterNameList = list (anObject.__code__.co_varnames)
-            except:     
-                parameterNameList = []
-            
-            attributeList = [getattr (anObject, attributeName) for attributeName in attributeNameList]
-            # Split module name chunks that were joined by placeholder    
-            attributeSkipWordList = (self.plainMarker.join (attributeNameList)) .split (self.plainMarker)  
-            
-            # Entries both starting and ending with __ are skipped anyhow by the identifier regex, not including them here saves time
-            updateSet = set (
-                [entry for entry in (parameterNameList + attributeSkipWordList) 
-                 if not (entry.startswith ('__') and entry.endswith ('__'))])
-            
-            self.skipWordSet.update (updateSet)
-            
-            for attribute in attributeList: 
-                try:
-                    addExternalNames (attribute)
-                except:
-                    pass
-    
-        addExternalNames (__builtin__ if isPython2 else builtins) 
-        addExternalNames (externalModules)
-    
-        self.skipWordList = list (self.skipWordSet)
-        self.skipWordList.sort (key=lambda s: s.lower ())
+        self.inspector = Inspector( self.externalModuleNameList, 
+                                    self.plainMarker, isVerbose )
+        #print(self.inspector.publicIds)           
+        self.skipWordSet.update( self.inspector.publicIds )                 
+        self.skipWordList = list( self.skipWordSet )
+        self.skipWordList.sort( key=lambda s: s.lower () )
     
         # ============ Generate obfuscated files
         
@@ -638,9 +583,9 @@ import {0} as currentModule
         # TODO: FIRST step through all files, looking for words to skip...
     
         # get obfuscated names for all files / sub directories to be created 
-        for path in sourceFilePathList:
+        for path in self.sourceFilePathList:
             if path == configFilePath: continue
-            if path in plainFilePathList: continue
+            if path in self.plainFilePathList: continue
             head, ext = os.path.splitext(path)        
             try :             
                 if ext[1:] not in self.sourceFileNameExtensionList: continue
@@ -651,7 +596,7 @@ import {0} as currentModule
             pathParts = [p for p in pathParts if p not in self.skipWordList]
             addObfuscatedWords( pathParts )
     
-        for sourceFilePath in sourceFilePathList:
+        for sourceFilePath in self.sourceFilePathList:
             if sourceFilePath == configFilePath:  # Don't copy the config file to the target directory
                 continue
     
@@ -662,7 +607,8 @@ import {0} as currentModule
                     
             # Read plain source
     
-            if sourceFileNameExtension in self.sourceFileNameExtensionList and not sourceFilePath in plainFilePathList:
+            if( sourceFileNameExtension in self.sourceFileNameExtensionList and 
+                not sourceFilePath in self.plainFilePathList ):
                 stringBase = random.randrange (64)
             
                 sourceFile = codecs.open (sourceFilePath, encoding=DEFAULT_ENCODING)
@@ -845,15 +791,15 @@ import {0} as currentModule
         # filter out obfuscated mods which are included in the project     
         if len(self._parser.obfuscatedMods) > 0:
             obFiles = self.obfuscatedFileDict                
-            projPkgs = ([opy_parser.toProjectSubPackage(f) for f in plainFiles] + 
-                         [opy_parser.toProjectSubPackage(f) for f in obFiles])                                             
-            projMods = ([opy_parser.rootFileName(f) for f in plainFiles] + 
-                         [opy_parser.rootFileName(f) for f in obFiles])     
+            projPkgs = ([parser.toProjectSubPackage(f) for f in plainFiles] + 
+                         [parser.toProjectSubPackage(f) for f in obFiles])                                             
+            projMods = ([parser.rootFileName(f) for f in plainFiles] + 
+                         [parser.rootFileName(f) for f in obFiles])     
             if projPkgs   is None: projPkgs = []
             if projMods   is None: projMods = []
             if plainNames is None: plainNames = []
             self._parser.obfuscatedMods = [m for m in self._parser.obfuscatedMods
-                        if opy_parser.rootImportName(m) not in projPkgs]                                
+                        if parser.rootImportName(m) not in projPkgs]                                
             self._parser.obfuscatedMods = [m for m in self._parser.obfuscatedMods
                 if m not in projMods and m not in plainNames]
                          
@@ -861,7 +807,7 @@ import {0} as currentModule
         if len(self._parser.obfuscatedMods) > 0 and isStandardExc:                         
             stdEx = [m for m in self._parser.obfuscatedMods
                       if m in self.standardExclusions
-                      or opy_parser.rootImportName(m) in self.standardExclusions] 
+                      or parser.rootImportName(m) in self.standardExclusions] 
             self._parser.obfuscatedMods = [m for m in self._parser.obfuscatedMods 
                                            if m not in stdEx]
             if len(stdEx) > 0: 
