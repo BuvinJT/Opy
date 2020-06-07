@@ -178,22 +178,29 @@ class Obfuscator():
                 self.obfTail
             )
                         
-        def scramble (stringLiteral):           
+        def scramble(stringLiteral):           
             if PY2:
-                recodedStringLiteral = unicode () .join ([unichr (charBase + ord (char) + (charIndex + self.stringNr) % charModulus) for charIndex, char in enumerate (stringLiteral)])  # @UndefinedVariable
-                stringKey = unichr (self.stringNr)  # @UndefinedVariable
+                recodedStringLiteral = unicode().join( # @UndefinedVariable
+                    [unichr(charBase + ord(char) + # @UndefinedVariable
+                            (charIndex + self.stringNr) % charModulus)  
+                     for charIndex, char in enumerate(stringLiteral)] )  
+                stringKey = unichr(self.stringNr)  # @UndefinedVariable
             else:
-                recodedStringLiteral = str () .join ([chr (charBase + ord (char) + (charIndex + self.stringNr) % charModulus) for charIndex, char in enumerate (stringLiteral)])
-                stringKey = chr (self.stringNr)
+                recodedStringLiteral = str().join(
+                    [chr(charBase + ord(char) + 
+                          (charIndex + self.stringNr) % charModulus) 
+                     for charIndex, char in enumerate(stringLiteral)])
+                stringKey = chr(self.stringNr)
                 
-            rotationDistance = self.stringNr % len (stringLiteral)
-            rotatedStringLiteral = recodedStringLiteral [:-rotationDistance] + recodedStringLiteral [-rotationDistance:]
+            rotationDistance = self.stringNr % len(stringLiteral)
+            rotatedStringLiteral =( recodedStringLiteral[:-rotationDistance] + 
+                                    recodedStringLiteral[-rotationDistance:] )
             keyedStringLiteral = rotatedStringLiteral + stringKey
             
             self.stringNr += 1
             return 'u"' + keyedStringLiteral + '"'      
             
-        def getUnScrambler (stringBase):  # @UnusedVariable
+        def getUnScrambler(stringBase):  # @UnusedVariable
             return '''
 from sys import version_info as __opyVerInfo
 
@@ -218,7 +225,7 @@ def unScramble{0} (keyedStringLiteral):
     return eval (stringLiteral)
     '''.format (self.plainMarker, charBase, charModulus) 
                 
-        def printHelpAndExit (errorLevel):
+        def printHelpAndExit(errorLevel):
             print (r'''
 ===============================================================================
 {0} will obfuscate your extensive, real world, multi module Python source code for free!
@@ -252,8 +259,8 @@ Licence:
 {3}
 ===============================================================================
     
-            '''.format (PROGRAM_NAME.capitalize (), PROGRAM_NAME, r'#', license))
-            if errorLevel is not None: exit (errorLevel)
+            '''.format(PROGRAM_NAME.capitalize(), PROGRAM_NAME, r'#', license))
+            if errorLevel is not None: exit(errorLevel)
             
         # ============ Assign directories ============
     
@@ -262,40 +269,40 @@ Licence:
             if runOptions.printHelp: printHelpAndExit(None)                   
                         
             if runOptions.sourceRootDirectory is not None:                    
-                sourceRootDirectory = runOptions.sourceRootDirectory.replace ('\\', '/')
+                sourceRootDirectory = runOptions.sourceRootDirectory.replace('\\', '/')
             else:
-                sourceRootDirectory = os.getcwd () .replace ('\\', '/')
+                sourceRootDirectory = os.getcwd ().replace('\\', '/')
     
             if runOptions.targetRootDirectory is not None:
-                self.targetRootDirectory = runOptions.targetRootDirectory.replace ('\\', '/')
+                self.targetRootDirectory = runOptions.targetRootDirectory.replace('\\', '/')
             else:
-                self.targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
+                self.targetRootDirectory = '{0}/{1}_{2}'.format(* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
     
             if runOptions.configFilePath == False :
                 configFilePath = ""
             elif runOptions.configFilePath is not None:
-                configFilePath = runOptions.configFilePath.replace ('\\', '/')
+                configFilePath = runOptions.configFilePath.replace('\\', '/')
             else:
-                configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, PROGRAM_NAME)    
+                configFilePath = '{0}/{1}_config.txt'.format(sourceRootDirectory, PROGRAM_NAME)    
         else:
             # Use command line arguments
-            if len (sys.argv) > 1:
+            if len(sys.argv) > 1:
                 for switch in '?', '-h', '--help':
-                    if switch in sys.argv [1]:
+                    if switch in sys.argv[1]:
                         printHelpAndExit (0)
-                sourceRootDirectory = sys.argv [1] .replace ('\\', '/')
+                sourceRootDirectory = sys.argv[1].replace('\\', '/')
             else:
-                sourceRootDirectory = os.getcwd () .replace ('\\', '/')
+                sourceRootDirectory = os.getcwd().replace('\\', '/')
     
-            if len (sys.argv) > 2:
-                self.targetRootDirectory = sys.argv [2] .replace ('\\', '/')
+            if len(sys.argv) > 2:
+                self.targetRootDirectory = sys.argv[2].replace('\\', '/')
             else:
-                self.targetRootDirectory = '{0}/{1}_{2}'.format (* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
+                self.targetRootDirectory = '{0}/{1}_{2}'.format(* (sourceRootDirectory.rsplit ('/', 1) + [PROGRAM_NAME]))
     
-            if len (sys.argv) > 3:
-                configFilePath = sys.argv [3] .replace ('\\', '/')
+            if len(sys.argv) > 3:
+                configFilePath = sys.argv[3].replace('\\', '/')
             else:
-                configFilePath = '{0}/{1}_config.txt'.format (sourceRootDirectory, PROGRAM_NAME)
+                configFilePath = '{0}/{1}_config.txt'.format(sourceRootDirectory, PROGRAM_NAME)
                 
         # =========== Read config file
     
@@ -308,20 +315,17 @@ Licence:
         if configFilePath == "":        
             configFile = runOptions.config.toVirtualFile()
         else :        
-            try:
-                configFile = open (configFilePath)
+            try: configFile = open(configFilePath)
             except Exception as exception:
-                print (exception)
+                print(exception)
                 printHelpAndExit (1)
             
         exec (configFile.read (), globals())
-        configFile.close ()
+        configFile.close()
         
-        def getConfig (parameter, default):
-            try:
-                return eval (parameter)
-            except:
-                return default
+        def getConfig(parameter, default):
+            try:    return eval (parameter)
+            except: return default
         
         self.obfuscateStrings = getConfig ('obfuscate_strings', False)
         self.asciiStrings = getConfig ('ascii_strings', False)
@@ -360,7 +364,7 @@ Licence:
                         self.topLevelSubDirectories.append( sub )
             except: pass
         
-        def hasSkipPathFragment (sourceFilePath):
+        def hasSkipPathFragment(sourceFilePath):
             for skipPathFragment in self.skipPathFragmentList:
                 if skipPathFragment in sourceFilePath:
                     return True
@@ -382,21 +386,21 @@ Licence:
     
         # =========== Define comment swapping tools
                 
-        shebangCommentRegEx = re.compile (r'^{0}!'.format (r'#'))
-        codingCommentRegEx = re.compile ('coding[:=]\s*([-\w.]+)')
-        keepCommentRegEx = re.compile ('.*{0}.*'.format (self.plainMarker), re.DOTALL)  # @UndefinedVariable
+        shebangCommentRegEx = re.compile(r'^{0}!'.format (r'#'))
+        codingCommentRegEx = re.compile('coding[:=]\s*([-\w.]+)')
+        keepCommentRegEx = re.compile('.*{0}.*'.format (self.plainMarker), re.DOTALL)  # @UndefinedVariable
             
-        def getCommentPlaceholderAndRegister (matchObject):
-            comment = matchObject.group (0)
-            if keepCommentRegEx.search (comment):  # Rare, so no need for speed
-                replacedComments.append (comment.replace (self.plainMarker, ''))
+        def getCommentPlaceholderAndRegister(matchObject):
+            comment = matchObject.group(0)
+            if keepCommentRegEx.search(comment):  # Rare, so no need for speed
+                replacedComments.append(comment.replace (self.plainMarker, ''))
                 return commentPlaceholder
             else:
                 return ''
             
         def getComment (matchObject):  # @UnusedVariable
             self.commentIndex += 1
-            return replacedComments [self.commentIndex]
+            return replacedComments[self.commentIndex]
             
         commentRegEx = (
                 re.compile (r'{0}{1}{2}.*?$'.format (
@@ -411,31 +415,31 @@ Licence:
                     r'#'
                 ), re.MULTILINE)  # @UndefinedVariable
         )
-        commentPlaceholder = '_{0}_c_'.format (PROGRAM_NAME)
-        commentPlaceholderRegEx = re.compile (r'{0}'.format (commentPlaceholder))
+        commentPlaceholder = '_{0}_c_'.format(PROGRAM_NAME)
+        commentPlaceholderRegEx = re.compile(r'{0}'.format (commentPlaceholder))
     
         # ============ Define string swapping tools
     
-        keepStringRegEx = re.compile (r'.*{0}.*'.format (self.plainMarker))
+        keepStringRegEx = re.compile (r'.*{0}.*'.format(self.plainMarker))
             
-        def getDecodedStringPlaceholderAndRegister (matchObject): 
+        def getDecodedStringPlaceholderAndRegister(matchObject): 
             string = matchObject.group (0)
             if self.obfuscateStrings:
-                if keepStringRegEx.search (string):  # Rare, so no need for speed
-                    replacedStrings.append (string.replace (self.plainMarker, ''))
+                if keepStringRegEx.search(string):  # Rare, so no need for speed
+                    replacedStrings.append(string.replace(self.plainMarker, ''))
                     return stringPlaceholder  # Store original string minus self.plainMarker, no need to unscramble
                 else:
-                    replacedStrings.append (scramble (string))
-                    return 'unScramble{0} ({1})'.format (self.plainMarker, stringPlaceholder)  # Store unScramble (<scrambledString>)
+                    replacedStrings.append(scramble(string))
+                    return 'unScramble{0} ({1})'.format(self.plainMarker, stringPlaceholder)  # Store unScramble (<scrambledString>)
             else:
-                replacedStrings.append (string)
+                replacedStrings.append(string)
                 return stringPlaceholder
             
-        def getString (matchObject):  # @UnusedVariable
+        def getString(matchObject):  # @UnusedVariable
             self.stringIndex += 1
             return replacedStrings [self.stringIndex]
     
-        stringRegEx = re.compile (r'([ru]|ru|ur|[rb]|rb|br)?(({0})|({1})|({2})|({3}))'.format (
+        stringRegEx = re.compile (r'([ru]|ru|ur|[rb]|rb|br)?(({0})|({1})|({2})|({3}))'.format(
             r"'''.*?(?<![^\\]\\)(?<![^\\]\')'''",
             r'""".*?(?<![^\\]\\)(?<![^\\]\")"""',
             r"'.*?(?<![^\\]\\)'",
@@ -451,7 +455,7 @@ Licence:
             fromFuture = matchObject.group (0)
     
             if fromFuture:
-                contentList [self.nrOfSpecialLines:self.nrOfSpecialLines] = [fromFuture]  # Move 'from __future__' line after other special lines
+                contentList[self.nrOfSpecialLines:self.nrOfSpecialLines] = [fromFuture]  # Move 'from __future__' line after other special lines
                 self.nrOfSpecialLines += 1
             return ''
             
@@ -475,14 +479,20 @@ Licence:
     
         # =========== Generate skip list
         
-        self.skipWordSet = set (keyword.kwlist + ['__init__'] + self.extraPlainWordList)  # __init__ should be in, since __init__.py is special
-        if not PY2: self.skipWordSet.update(['unicode', 'unichr' ])  # not naturally kept in clear text when obfuscation is produced in Python 3
+        # __init__ should be in, since __init__.py is special
+        self.skipWordSet = set( keyword.kwlist + ['__init__'] + self.extraPlainWordList )
+        # these are not naturally kept in clear text when obfuscation is produced in Python 3  
+        if not PY2: self.skipWordSet.update(['unicode', 'unichr' ])  
     
-        self.rawPlainFilePathList = ['{0}/{1}'.format (sourceRootDirectory, plainFileRelPath.replace ('\\', '/')) for plainFileRelPath in self.plainFileRelPathList]
+        self.rawPlainFilePathList = [
+            '{0}/{1}'.format(sourceRootDirectory, plainFileRelPath.replace ('\\', '/')) 
+            for plainFileRelPath in self.plainFileRelPathList ]
         
         # Prevent e.g. attempt to open opy_config.txt if it is in a different location but still listed under plain_files
         
-        self.plainFilePathList = [plainFilePath for plainFilePath in self.rawPlainFilePathList if os.path.exists (plainFilePath)]
+        self.plainFilePathList = [plainFilePath for plainFilePath 
+                                  in self.rawPlainFilePathList 
+                                  if os.path.exists (plainFilePath)]
         
         for plainFilePath in self.plainFilePathList:
             plainFile = open (plainFilePath)
@@ -528,11 +538,12 @@ Licence:
             addObfuscatedWords( pathParts )
     
         for sourceFilePath in self.sourceFilePathList:
-            if sourceFilePath == configFilePath:  # Don't copy the config file to the target directory
-                continue
+            # Don't copy the config file to the target directory
+            if sourceFilePath == configFilePath: continue
     
-            sourceDirectory, sourceFileName = sourceFilePath.rsplit ('/', 1)
-            sourceFilePreName, sourceFileNameExtension = (sourceFileName.rsplit ('.', 1) + ['']) [ : 2]
+            sourceDirectory, sourceFileName = sourceFilePath.rsplit('/', 1)
+            sourceFilePreName, sourceFileNameExtension = (
+                sourceFileName.rsplit('.', 1) + [''])[ : 2]
             targetRelSubDirectory = sourceFilePath [len (sourceRootDirectory) : ]
             clearRelPath = targetRelSubDirectory[1:]  # remove leading /
                     
@@ -551,44 +562,47 @@ Licence:
                     self.skipWordSet.update(self.skippedPublicSet)   
                 
                 replacedComments = []
-                contentList = content.split ('\n', 2)
+                contentList = content.split( '\n', 2 )
                     
                 self.nrOfSpecialLines = 0
                 insertCodingComment = True
                 
-                if len (contentList) > 0:
-                    if shebangCommentRegEx.search (contentList [0]):  # If the original code starts with a shebang line
+                if len(contentList) > 0:
+                    if shebangCommentRegEx.search( contentList[0] ):  # If the original code starts with a shebang line
                         self.nrOfSpecialLines += 1  #   Account for that
-                        if len (contentList) > 1 and codingCommentRegEx.search (contentList [1]):  #   If after the shebang a coding comment follows
-                            self.nrOfSpecialLines += 1  #       Account for that
-                            insertCodingComment = False  #       Don't insert, it's already there
-                    elif codingCommentRegEx.search (contentList [0]):  # Else if the original code starts with a coding comment
-                        self.nrOfSpecialLines += 1  #   Account for that
-                        insertCodingComment = False  #   Don't insert, it's already there
+                
+                    # NOTE: While the original code preserved coding lines, we now replace them 
+                            
+                    #    if len(contentList) > 1 and codingCommentRegEx.search( contentList[1] ):  #   If after the shebang a coding comment follows
+                    #        self.nrOfSpecialLines += 1  #       Account for that
+                    #        insertCodingComment = False  #       Don't insert, it's already there
+                    #elif codingCommentRegEx.search( contentList[0] ):  # Else if the original code starts with a coding comment
+                    #    self.nrOfSpecialLines += 1  #   Account for that
+                    #    insertCodingComment = False  #   Don't insert, it's already there
                     
-                if self.obfuscateStrings and insertCodingComment:  # Obfuscated strings are always converted to unicode
-                    contentList [self.nrOfSpecialLines:self.nrOfSpecialLines] = ['# coding: ' + DEFAULT_ENCODING]  # Insert the coding line if it wasn't there
+                #if self.obfuscateStrings and insertCodingComment:  # Obfuscated strings are always converted to unicode
+                if insertCodingComment:  
+                    contentList [self.nrOfSpecialLines:self.nrOfSpecialLines] = [
+                        '# coding: ' + DEFAULT_ENCODING ]  # Insert the coding line if it wasn't there
                     self.nrOfSpecialLines += 1  # And remember it's there
-                                                                                                    # Nothing has to happen with an eventual shebang line
+                                            # Nothing has to happen with an eventual shebang line
                 if self.obfuscateStrings:
-                    normalContent = '\n'.join ([getUnScrambler (stringBase)] + contentList [self.nrOfSpecialLines:])
+                    normalContent = '\n'.join(
+                        [getUnScrambler(stringBase)] + contentList[self.nrOfSpecialLines:] )
                 else:
-                    normalContent = '\n'.join (contentList [self.nrOfSpecialLines:])
+                    normalContent = '\n'.join( contentList[self.nrOfSpecialLines:] )
                     
                 # At this point normalContent does not contain the special lines
-                # They are in contentList
-                
-                normalContent = commentRegEx.sub (getCommentPlaceholderAndRegister, normalContent)
-                 
-                # Replace strings by string place holders
-                
+                # They are in contentList                
+                normalContent = commentRegEx.sub( getCommentPlaceholderAndRegister, 
+                                                  normalContent )                 
+                # Replace strings by string place holders                
                 replacedStrings = []
-                normalContent = stringRegEx.sub (getDecodedStringPlaceholderAndRegister, normalContent)
-                
+                normalContent = stringRegEx.sub( getDecodedStringPlaceholderAndRegister, 
+                                                 normalContent )                
                 # Take eventual out 'from __future__ import ... ' line and add it to content list
-                # Content list is prepended to normalContent later
-                
-                normalContent = fromFutureRegEx.sub (moveFromFuture, normalContent)
+                # Content list is prepended to normalContent later                
+                normalContent = fromFutureRegEx.sub( moveFromFuture, normalContent )
     
                 # temporary setup for using the parser....
                 self.clearTextMods=self.externalModuleNameList
@@ -629,29 +643,31 @@ Licence:
                         obf = getObfuscatedName( idx, self.obfuscatedWordList[ idx ] )                                    
                         normalContent = regEx.sub( obf, normalContent )   
                         
-                # Replace string place holders by strings
-                
+                # Replace string place holders by strings                
                 self.stringIndex = -1
-                normalContent = stringPlaceholderRegEx.sub (getString, normalContent)
+                normalContent = stringPlaceholderRegEx.sub( getString, normalContent )
             
-                # Replace nonempty comment place holders by comments
-                
+                # Replace nonempty comment place holders by comments                
                 self.commentIndex = -1
-                normalContent = commentPlaceholderRegEx.sub (getComment, normalContent)
+                normalContent = commentPlaceholderRegEx.sub( getComment, normalContent )
                 
-                content = '\n'.join (contentList [:self.nrOfSpecialLines] + [normalContent])
+                content = '\n'.join( contentList[:self.nrOfSpecialLines] + [normalContent] )
                 
-                # Remove empty lines
-                
-                content = '\n'.join ([line for line in [line.rstrip () for line in content.split ('\n')] if line])
+                # Remove empty lines                
+                content = '\n'.join(
+                    [line for line in 
+                        [line.rstrip () for line in content.split('\n')] if line] )
                 
                 if self.preppedOnly :
                     targetFilePreName = sourceFilePreName 
-                    targetSubDirectory = '{0}{1}'.format (self.targetRootDirectory, targetRelSubDirectory) .rsplit ('/', 1) [0]
+                    targetSubDirectory = '{0}{1}'.format(
+                        self.targetRootDirectory, targetRelSubDirectory ).rsplit('/', 1)[0]
                 else :                     
                     # Obfuscate module name
                     try:
-                        targetFilePreName = getObfuscatedName (self.obfuscatedWordList.index (sourceFilePreName), sourceFilePreName)
+                        targetFilePreName = getObfuscatedName(
+                            self.obfuscatedWordList.index( sourceFilePreName ), 
+                            sourceFilePreName )
                     except:  # Not in list, e.g. top level module name
                         targetFilePreName = sourceFilePreName
                     if DEBUG_LEVEL > 2:
@@ -660,26 +676,30 @@ Licence:
                     
                     # Obfuscate module subdir names, but only above the project root!
                     orginalSubDirectory = targetRelSubDirectory
-                    targetChunks = targetRelSubDirectory.split ('/')
+                    targetChunks = targetRelSubDirectory.split('/')
                     for index in range (len (targetChunks)):
                         try:
                             if DEBUG_LEVEL > 2:
                                 print("original dir part %s" % (targetChunks[index],))                            
-                            targetChunks[index] = getObfuscatedName (self.obfuscatedWordList.index (targetChunks [index]), targetChunks [index])
+                            targetChunks[index] = getObfuscatedName(
+                                self.obfuscatedWordList.index( targetChunks [index] ), 
+                                targetChunks[index] )
                             if DEBUG_LEVEL > 2:
                                 print("changed to %s" % (targetChunks[index],))                            
                         except:  # Not in list
                             if DEBUG_LEVEL > 2:
                                 print("kept as %s" % (targetChunks[index],))
                             pass
-                    targetRelSubDirectory = '/'.join (targetChunks)
-                    targetSubDirectory = '{0}{1}'.format (self.targetRootDirectory, targetRelSubDirectory) .rsplit ('/', 1) [0]
+                    targetRelSubDirectory = '/'.join( targetChunks )
+                    targetSubDirectory = '{0}{1}'.format(
+                        self.targetRootDirectory, targetRelSubDirectory ).rsplit('/', 1)[0]
                     if DEBUG_LEVEL > 2:
                         print("original directory %s changed to %s" % 
                                (orginalSubDirectory, targetRelSubDirectory))    
     
                 # Create target path and track it against clear text relative source                       
-                obfusPath = '{0}/{1}.{2}'.format (targetSubDirectory, targetFilePreName, sourceFileNameExtension)
+                obfusPath = '{0}/{1}.{2}'.format(
+                    targetSubDirectory, targetFilePreName, sourceFileNameExtension )
                 self.obfuscatedFileDict[clearRelPath] = obfusPath
                 if DEBUG_LEVEL > 2:
                     print("original relative path %s mapped to target %s" % 
@@ -692,9 +712,10 @@ Licence:
                 targetFile = createFilePath (obfusPath, open=True)
                 targetFile.write (content)
                 targetFile.close ()
-            elif (not self.dryRun) and (not sourceFileNameExtension in self.skipFileNameExtensionList):
-                targetSubDirectory = '{0}{1}'.format (self.targetRootDirectory, targetRelSubDirectory) .rsplit ('/', 1) [0]
-                
+            elif( not self.dryRun and 
+                  not sourceFileNameExtension in self.skipFileNameExtensionList ):
+                targetSubDirectory = '{0}{1}'.format(
+                    self.targetRootDirectory, targetRelSubDirectory ).rsplit('/', 1)[0]                
                 # Create target path and copy file
                 targetFilePath = '{0}/{1}'.format (targetSubDirectory, sourceFileName)
                 createFilePath (targetFilePath)
