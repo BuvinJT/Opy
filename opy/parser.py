@@ -153,7 +153,9 @@ class Parser():
                     if( srcExt is not None and 
                         srcExt not in self.obfuscator.obfuscateExts ):
                         self.toClearTextMods.add( d.real_mod )
-                    if name != d.real_mod: self.toClearTextIds.add( name )
+                    if( name != d.real_mod and 
+                        name not in self.obfuscator.clearTextIds ): 
+                        self.toClearTextIds.add( name )
                                     
         # "GENERATOR" function, to be called in a loop
         # Returns a detailed accounting of parsed results
