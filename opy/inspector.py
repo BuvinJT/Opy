@@ -18,7 +18,7 @@ class Inspector:
         self._extractIds( __builtin__ if PY2 else builtins )
         try:    mods.extend( _OTHER_BUILTIN_MODS )
         except: mods = _OTHER_BUILTIN_MODS     
-        self._extractIds( _ModAttribCollector( mods, plainMarker, isVerbose ) )
+        self._extractIds( _AttributeSponge( mods, plainMarker, isVerbose ) )
                  
     def _extractIds( self, obj ):
         if obj in self.__modObjs: return
@@ -47,7 +47,7 @@ class Inspector:
             try   : self._extractIds( subAttrib )
             except: pass
 
-class _ModAttribCollector:
+class _AttributeSponge:
 
     def __init__( self, mods, plainMarker, isVerbose=False ):
         for mod in mods:

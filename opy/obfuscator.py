@@ -3,16 +3,10 @@ import os
 import sys
 import errno
 import keyword
-import importlib  # @UnusedImport
 import random
 import codecs
 import shutil
 from six import PY2, iteritems
-
-if PY2 : 
-    import __builtin__  # @UnresolvedImport
-else:
-    import builtins   
 
 PROGRAM_NAME = 'opy'
 DEFAULT_ENCODING = 'utf-8'
@@ -75,23 +69,23 @@ class Obfuscator():
             if isPreserving:
                 if isVerbose: 
                     for m in obMods: 
-                        print("WARNING unresolved import: %s" % (m,))
+                        print("WARNING unresolved module: %s" % (m,))
                     print("")
                 try:    runOptions.config.external_modules.extend(obMods)
                 except: runOptions.config.external_modules = obMods
             elif isThrowing:                    
-                raise OpyError("Unresolved import(s): %s" % (",".join(obMods),)) 
+                raise OpyError("Unresolved module(s): %s" % (",".join(obMods),)) 
 
-        # extend the "plain names" list with the imports that can't be obfuscated  
+        # extend the clear text mods list as directed by the analysis  
         clearMods = analysis.toClearTextMods   
         if len(clearMods) > 0: 
                 if isVerbose: 
-                    print("Imported module found which must remain in clear text: %s" 
+                    print("Imported modules found which must remain in clear text: %s" 
                           % (",".join(clearMods),))   
                 try:    runOptions.config.external_modules.extend(clearMods)
                 except: runOptions.config.external_modules = clearMods
     
-        # extend the "plain names" list with the imports that can't be obfuscated  
+        # extend the clear text id list as directed by the analysis  
         clearIds = analysis.toClearTextIds   
         if len(clearIds) > 0: 
                 if isVerbose: 
@@ -141,14 +135,12 @@ class Obfuscator():
         # =========== Utilities   
     
         def createFilePath( filePath, open=False ):  # @ReservedAssignment
-            try:
-                os.makedirs (filePath.rsplit ('/', 1) [0])
+            try: os.makedirs( filePath.rsplit('/', 1)[0] )
             except OSError as exception:
-                if exception.errno != errno.EEXIST:
-                    raise
-                    
+                if exception.errno != errno.EEXIST: raise                    
             if open:
-                return codecs.open (filePath, encoding=DEFAULT_ENCODING, mode='w')
+                return codecs.open( filePath, encoding=DEFAULT_ENCODING, 
+                                    mode='w' )
     
         def addObfuscatedWords( sourceWordSet ):
             
@@ -423,7 +415,7 @@ Licence:
         keepStringRegEx = re.compile (r'.*{0}.*'.format(self.plainMarker))
             
         def getDecodedStringPlaceholderAndRegister(matchObject): 
-            string = matchObject.group (0)
+            string = matchObject.group(0)
             if self.obfuscateStrings:
                 if keepStringRegEx.search(string):  # Rare, so no need for speed
                     replacedStrings.append(string.replace(self.plainMarker, ''))
@@ -557,9 +549,27 @@ Licence:
                 content = sourceFile.read () 
                 sourceFile.close ()
                 
+                # temporary setup for using the parser....
+                self.clearTextMods=self.externalModuleNameList
+                self.clearTextIds=list(self.skipWordSet)
+                self.obfuscateExts=self.sourceFileNameExtensionList 
+                self.replacements=self.replacementModulesDict
+                
                 if self.skipPublicIdentifiers:
                     self.skippedPublicSet.update(self._parser.findPublicIdentifiers(content))
                     self.skipWordSet.update(self.skippedPublicSet)   
+                
+                # Replace any imported modules per the old/new (key/value) pairs provided
+                if len(self.replacementModulesDict) > 0 : 
+                    content = self._parser.replaceModNames( content, sourceFilePath )
+                                    
+                # Parse content to find imports and optionally provide aliases for those in clear text,
+                # so that they will become "masked" upon obfuscation.
+                if self.maskExternalModules : 
+                    # injectAliases implicitly analyzes
+                    content = self._parser.injectAliases( content, sourceFilePath )
+                else:  
+                    self._parser.analyzeImports( content, sourceFilePath )
                 
                 replacedComments = []
                 contentList = content.split( '\n', 2 )
@@ -603,28 +613,7 @@ Licence:
                 # Take eventual out 'from __future__ import ... ' line and add it to content list
                 # Content list is prepended to normalContent later                
                 normalContent = fromFutureRegEx.sub( moveFromFuture, normalContent )
-    
-                # temporary setup for using the parser....
-                self.clearTextMods=self.externalModuleNameList
-                self.clearTextIds=list(self.skipWordSet)
-                self.obfuscateExts=self.sourceFileNameExtensionList 
-                self.replacements=self.replacementModulesDict
-                
-                # Replace any imported modules per the old/new (key/value) pairs provided
-                if len(self.replacementModulesDict) > 0 : 
-                    normalContent = self._parser.replaceModNames(
-                        normalContent, sourceFilePath )
-                                    
-                # Parse content to find imports and optionally provide aliases for those in clear text,
-                # so that they will become "masked" upon obfuscation.
-                if self.maskExternalModules : 
-                    # injectAliases implicitly analyzes
-                    normalContent = self._parser.injectAliases(
-                        normalContent, sourceFilePath )
-                else:  
-                    self._parser.analyzeImports(
-                        normalContent, sourceFilePath )
-    
+                                                                                        
                 #topLevelSubDirectories
     
                 #-------------------
@@ -650,6 +639,32 @@ Licence:
                 # Replace nonempty comment place holders by comments                
                 self.commentIndex = -1
                 normalContent = commentPlaceholderRegEx.sub( getComment, normalContent )
+
+                def fixCrossLineStrings( content ):
+                    import ast                                        
+                    priorLineno=None 
+                    unscramble = self.obfuscatedWordDict.get(
+                        "unScramble{0}".format(self.plainMarker) )              
+                    while True: 
+                        try: 
+                            ast.parse( content )  
+                            return content                            
+                        except SyntaxError as e:
+                            if e.lineno==priorLineno : break 
+                            priorLineno = e.lineno 
+                            idx = e.lineno-1        
+                            lines = content.split('\n') 
+                            line = lines[idx]                    
+                            if line.strip().startswith( unscramble ):
+                                lines[idx-1] += ' \\' 
+                                lines[idx] = line.replace( unscramble, 
+                                                           "+ " + unscramble, 1 )
+                            content = '\n'.join( lines )
+                        except Exception as e:
+                            print(e)
+                            break         
+                    return content                                                 
+                normalContent = fixCrossLineStrings( normalContent )
                 
                 content = '\n'.join( contentList[:self.nrOfSpecialLines] + [normalContent] )
                 
