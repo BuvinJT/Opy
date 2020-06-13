@@ -34,7 +34,8 @@ class OpyResults:
         self.obfuscatedIds     = None   
         self.clearTextIds      = None
         self.obfuscatedImports = None
-        self.clearTextImports  = None                   
+        self.clearTextImports  = None
+        self.wildCardImports   = None                           
         self.maskedImports     = None
         self.obfuscatedMods    = None
         self.clearTextMods     = None                      
@@ -786,11 +787,12 @@ Licence:
         results = OpyResults()
         results.obfuscatedFiles   = self.obfuscatedFileDict
         results.obfuscatedIds     = self.obfuscatedWordDict   
-        results.clearTextIds      = self.skipWordSet
+        results.clearTextIds      = self.skipWordSet        
         results.obfuscatedImports = _toCleanStrList(
             self._parser.obfuscatedImports )
         results.clearTextImports  = _toCleanStrList(
              self._parser.clearTextImports )
+        results.wildCardImports   = self._parser.wildCardImports
         results.maskedImports     = self._parser.maskedImports
         results.clearTextPublic   = self.skippedPublicSet        
         results.obfuscatedMods    = _toCleanStrList(
@@ -810,6 +812,7 @@ Licence:
             #print ('Clear text identifiers: {0}'.format(len(self.skipWordSet)))
             print ('Obfuscated imports: {0}'.format(len(results.obfuscatedImports)))     
             print ('Clear text imports: {0}'.format(len(results.clearTextImports)))
+            print ('Wild card imports: {0}'.format(len(results.wildCardImports)))
             print ('Masked Imports: {0}'.format(len(results.maskedImports)))
             print ('Obfuscated module imports: {0}'.format(len(results.obfuscatedMods)))        
             print ('Clear text module imports: {0}'.format(len(results.clearTextMods)))
@@ -823,6 +826,7 @@ Licence:
             #print ('Clear text identifiers: {0}'.format(self.skipWordSet))
             print ('Obfuscated imports: {0}'.format(results.obfuscatedImports))     
             print ('Clear text imports: {0}'.format(results.clearTextImports))
+            print ('Wild card imports: {0}'.format(results.wildCardImports))
             print ('Masked Imports: {0}'.format(results.maskedImports))
             print ('Obfuscated module imports: {0}'.format(results.obfuscatedMods))
             print ('Clear text module imports: {0}'.format(results.clearTextMods))        

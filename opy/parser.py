@@ -17,6 +17,7 @@ CONTINUATION = "\\"
 IDENTIFIER_REGEX     = r'\b{0}\b'
 IDENTIFIER_DOT_REGEX = r'\b{0}\.\b'
 
+WILDCARD="*"
 MEMBER_DELIM = SUB_MOD_DELIM = '.'
 MAGIC_PREFFIX = MAGIC_SUFFIX = PRIVATE_PREFIX = '__'
 
@@ -60,11 +61,12 @@ class Parser():
     def _reset( self ):
         self.obfuscatedImports = set()
         self.clearTextImports  = set()
+        self.wildCardImports   = [] # list of tuple "pairs"
         self.obfuscatedMods    = set()
         self.clearTextMods     = set()
         self.maskedImports     = {}
         self.toClearTextMods   = set()
-        self.toClearTextIds    = set()
+        self.toClearTextIds    = set()       
             
     def analyzeImports( self,fileContent, fileName=None ):
         self.__parseImports( Parser.__ANALIZE_MODE, fileContent, fileName )
@@ -91,7 +93,7 @@ class Parser():
                 fileContent, combineContinued=True ) )       
         
             # perform the fundamental parsing process
-            try: __catalogImports( fileContent )   
+            try: __catalogImports( fileContent, fileName )   
             except Exception:
                 _stdErr( Parser.__AST_ERR_TMPT % (fileName,) )
                 traceback.print_exc()
@@ -124,7 +126,7 @@ class Parser():
                 print()                                    
             return revisedContent 
     
-        def __catalogImports( fileContent ):
+        def __catalogImports( fileContent, fileName ):
             if DEBUG: print("\n>>> Cataloging imports...\n")
             
             # get the entire parsed results in single shot
@@ -133,8 +135,10 @@ class Parser():
             for d in self.__importDetails:
                 # *literal*, current obfuscated vs clear import identifiers
                 mod    = __detailToImportMod(  d )
-                name   = __detailToImportName( d )
+                name   = __detailToImportName( d )                
                 if mod:                 
+                    if name[0]==WILDCARD: 
+                        self.wildCardImports.append( (fileName, mod) )
                     #print( mod, self.obfuscator.clearTextMods, 
                     #       __isImportIn( mod, self.obfuscator.clearTextMods ) )                    
                     if( __isImportIn( mod, self.obfuscator.clearTextMods ) or 
@@ -189,7 +193,7 @@ class Parser():
                     module = node.module.split( SUB_MOD_DELIM )
                 else: continue        
                 for n in node.names:                
-                    name = n.name.split( MEMBER_DELIM )
+                    name = n.name.split( MEMBER_DELIM )                    
                     real_path = None                
                     real_mod = None
                     real_mbr = None
@@ -223,7 +227,8 @@ class Parser():
             for d in self.__importDetails:          
                 if d.alias : continue  
                 if d.real_mod in modFilter : 
-                    imp      = MEMBER_DELIM.join( d.name ) 
+                    imp      = MEMBER_DELIM.join( d.name )
+                    if imp==WILDCARD : continue # for the moment, just skip these...                     
                     idx      = d.lineno-1        
                     line     = lines[ idx ]                             
                     try:    
@@ -429,6 +434,8 @@ from os import system, sep as PATH_DELIM, \
     remove as removeFile, \
     fdopen, getcwd, chdir, walk, environ, devnull
 from os.path import exists
+from os import *
+
     
 x = devnull
 _y = exists    
@@ -445,6 +452,7 @@ def __private(): return __z
     print( "obfuscated Imports", p.obfuscatedImports )
     print( "clear text Imports", p.clearTextImports )
     #print( "masked imports", p.maskedImports )
+    print( "wild card Imports", p.wildCardImports )
     print( "obfuscated mods", p.obfuscatedMods )
     print( "clear text Mods", p.clearTextMods )    
     print( "TO clear Text Mod", p.toClearTextMods )
